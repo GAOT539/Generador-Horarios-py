@@ -1,5 +1,6 @@
 from flask import Blueprint, render_template, request, jsonify
-from app.models import Profesor, Materia, Aula, ProfesorMateria, db
+from app.models import Profesor, Materia, Aula, ProfesorMateria, db, Horario, Curso
+from app.engine.solver import generar_horario_automatico
 
 bp = Blueprint('main', __name__)
 
@@ -29,21 +30,42 @@ def manage_aulas():
 
     return jsonify(list(Aula.select().dicts()))
 
-# --- API MATERIAS ---
+# --- API MATERIAS (ACTUALIZADA) ---
 @bp.route('/api/materias', methods=['GET', 'POST', 'DELETE'])
 def manage_materias():
     if request.method == 'POST':
+        data = request.json
         try:
-            Materia.create(nombre=request.json['nombre'])
+            # Ahora guardamos nombre, nivel y cuántos grupos se necesitan
+            Materia.create(
+                nombre=data['nombre'],     # Ej: "Inglés"
+                nivel=int(data['nivel']),  # Ej: 1
+                cantidad_grupos=int(data['cantidad']) # Ej: 3
+            )
             return jsonify({'status': 'ok'})
-        except:
-            return jsonify({'error': 'Duplicado'}), 400
+        except Exception as e:
+            return jsonify({'error': 'Duplicado o error de datos'}), 400
             
     if request.method == 'DELETE':
-        Materia.delete().where(Materia.id == request.args.get('id')).execute()
+        # Borrar materia (y sus relaciones con profesores)
+        materia_id = request.args.get('id')
+        ProfesorMateria.delete().where(ProfesorMateria.materia == materia_id).execute()
+        Materia.delete().where(Materia.id == materia_id).execute()
         return jsonify({'status': 'ok'})
 
-    return jsonify(list(Materia.select().dicts()))
+    # Al listar, ordenamos por Nombre y luego Nivel
+    materias = Materia.select().order_by(Materia.nombre, Materia.nivel)
+    lista = []
+    for m in materias:
+        lista.append({
+            'id': m.id,
+            'nombre': m.nombre,
+            'nivel': m.nivel,
+            'cantidad_grupos': m.cantidad_grupos,
+            # Generamos un nombre completo para mostrarlo fácil: "Inglés (Nivel 1)"
+            'nombre_completo': f"{m.nombre} (Nivel {m.nivel})"
+        })
+    return jsonify(lista)
 
 # --- API PROFESORES (COMPLEJO) ---
 @bp.route('/api/profesores', methods=['GET'])
@@ -84,6 +106,74 @@ def create_profesor():
             return jsonify({'status': 'ok'})
         except Exception as e:
             return jsonify({'error': str(e)}), 400
+# --- API CURSOS (NUEVO) ---
+from app.models import Curso # Asegúrate de importar Curso arriba
+
+@bp.route('/api/cursos', methods=['GET', 'POST', 'DELETE'])
+def manage_cursos():
+    if request.method == 'POST':
+        data = request.json
+        try:
+            # Creamos el curso combinando Nivel + Letra + Turno
+            # Ej: Nivel 1, Letra A, Turno Matutino
+            Curso.create(
+                nivel=int(data['nivel']),
+                nombre=data['letra'], # Usamos 'nombre' para la letra (A, B, C)
+                turno=data['turno']
+            )
+            return jsonify({'status': 'ok'})
+        except Exception as e:
+            return jsonify({'error': 'Duplicado o error de datos'}), 400
+
+    if request.method == 'DELETE':
+        Curso.delete().where(Curso.id == request.args.get('id')).execute()
+        return jsonify({'status': 'ok'})
+
+    # Al devolver la lista, ordenamos para que se vea bonito
+    cursos = Curso.select().order_by(Curso.nivel, Curso.nombre)
+    return jsonify(list(cursos.dicts()))
+
+# --- API GENERACIÓN ---
+@bp.route('/api/generar', methods=['POST'])
+def generar():
+    resultado = generar_horario_automatico()
+    if resultado['status'] == 'ok':
+        return jsonify(resultado)
+    else:
+        return jsonify(resultado), 400
+
+# --- API LEER HORARIO (Para el calendario) ---
+@bp.route('/api/horario', methods=['GET'])
+def get_horario():
+    # FullCalendar necesita un formato específico
+    eventos = []
+    horarios = Horario.select()
+    
+    # Mapeo de días para fecha ficticia (FullCalendar necesita fechas tipo 2023-01-01)
+    # Usaremos una semana ficticia de Lunes a Viernes
+    fechas_base = {
+        0: '2023-11-20', # Lunes
+        1: '2023-11-21', # Martes
+        2: '2023-11-22',
+        3: '2023-11-23',
+        4: '2023-11-24'  # Viernes
+    }
+
+    for h in horarios:
+        # Formatear hora (ej: 7 -> "07:00:00")
+        start = f"{h.hora_inicio:02d}:00:00"
+        end = f"{h.hora_fin:02d}:00:00"
+        
+        titulo = f"{h.materia.nombre} ({h.aula.nombre})\n{h.profesor.nombre}\n{h.curso.nombre}"
+        
+        eventos.append({
+            'title': titulo,
+            'start': f"{fechas_base[h.dia]}T{start}",
+            'end': f"{fechas_base[h.dia]}T{end}",
+            'color': '#3788d8' if h.curso.turno == 'Matutino' else '#28a745'
+        })
+        
+    return jsonify(eventos)
 
 @bp.route('/api/profesores/<int:id>', methods=['DELETE'])
 def delete_profesor(id):

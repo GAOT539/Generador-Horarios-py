@@ -2,19 +2,85 @@
 
 {% block content %}
 <div id="app">
-    <h1>Bienvenido al Generador de Horarios</h1>
-    <p>El sistema está funcionando correctamente.</p>
-    <div class="alert alert-success">
-        Conexión a Base de Datos: <strong>Activa</strong>
+    <div class="d-flex justify-content-between align-items-center mb-4">
+        <h2>📅 Horario General</h2>
+        <button @click="generarHorario" class="btn btn-primary btn-lg" :disabled="loading">
+            <span v-if="loading" class="spinner-border spinner-border-sm"></span>
+            <span v-else>✨ Generar Horario Automático</span>
+        </button>
+    </div>
+
+    <div class="card shadow">
+        <div class="card-body">
+            <div id="calendar"></div>
+        </div>
     </div>
 </div>
 
+<script src='https://cdn.jsdelivr.net/npm/fullcalendar@6.1.10/index.global.min.js'></script>
+
 <script>
     const { createApp } = Vue
+
     createApp({
+        compilerOptions: { delimiters: ['[[', ']]'] },
         data() {
             return {
-                message: 'Hola Vue!'
+                loading: false,
+                calendar: null
+            }
+        },
+        mounted() {
+            this.iniciarCalendario();
+        },
+        methods: {
+            iniciarCalendario() {
+                var calendarEl = document.getElementById('calendar');
+                this.calendar = new FullCalendar.Calendar(calendarEl, {
+                    initialView: 'timeGridWeek',
+                    locale: 'es',
+                    hiddenDays: [0, 6], // Ocultar Domingo(0) y Sabado(6)
+                    slotMinTime: '07:00:00',
+                    slotMaxTime: '22:00:00',
+                    allDaySlot: false,
+                    headerToolbar: {
+                        left: '',
+                        center: 'title',
+                        right: 'timeGridWeek,timeGridDay'
+                    },
+                    // Fecha base fija para que siempre se vea la misma semana
+                    initialDate: '2023-11-20', 
+                    events: '/api/horario' // Carga automática desde nuestra API
+                });
+                this.calendar.render();
+            },
+            async generarHorario() {
+                const confirm = await Swal.fire({
+                    title: '¿Generar nuevo horario?',
+                    text: "Se borrará el horario anterior y se calculará uno nuevo.",
+                    icon: 'question',
+                    showCancelButton: true,
+                    confirmButtonText: 'Sí, generar'
+                });
+
+                if (confirm.isConfirmed) {
+                    this.loading = true;
+                    try {
+                        const res = await fetch('/api/generar', {method: 'POST'});
+                        const data = await res.json();
+                        
+                        if (res.ok) {
+                            Swal.fire('¡Éxito!', data.message, 'success');
+                            this.calendar.refetchEvents(); // Recargar calendario visualmente
+                        } else {
+                            Swal.fire('Error Matemático', data.message, 'error');
+                        }
+                    } catch (e) {
+                        Swal.fire('Error', 'Fallo de conexión con el servidor', 'error');
+                    } finally {
+                        this.loading = false;
+                    }
+                }
             }
         }
     }).mount('#app')
