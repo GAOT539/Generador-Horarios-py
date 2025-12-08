@@ -1,0 +1,22 @@
+{% extends "base.html" %}
+
+{% block content %}
+<div id="app">
+    <h1>Bienvenido al Generador de Horarios</h1>
+    <p>El sistema está funcionando correctamente.</p>
+    <div class="alert alert-success">
+        Conexión a Base de Datos: <strong>Activa</strong>
+    </div>
+</div>
+
+<script>
+    const { createApp } = Vue
+    createApp({
+        data() {
+            return {
+                message: 'Hola Vue!'
+            }
+        }
+    }).mount('#app')
+</script>
+{% endblock %}

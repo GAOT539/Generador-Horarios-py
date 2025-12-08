@@ -1,0 +1,204 @@
+{% extends "base.html" %}
+
+{% block content %}
+<div id="app">
+    <h2 class="mb-4">Configuración del Sistema</h2>
+
+    <ul class="nav nav-tabs mb-4" id="myTab" role="tablist">
+        <li class="nav-item">
+            <button class="nav-link active" data-bs-toggle="tab" data-bs-target="#aulas">🏢 1. Aulas</button>
+        </li>
+        <li class="nav-item">
+            <button class="nav-link" data-bs-toggle="tab" data-bs-target="#materias">📚 2. Materias</button>
+        </li>
+        <li class="nav-item">
+            <button class="nav-link" data-bs-toggle="tab" data-bs-target="#profesores">👨‍🏫 3. Profesores</button>
+        </li>
+    </ul>
+
+    <div class="tab-content">
+        
+        <div class="tab-pane fade show active" id="aulas">
+            <div class="row">
+                <div class="col-md-4">
+                    <div class="card p-3">
+                        <h5>Crear Aula</h5>
+                        <form @submit.prevent="crearAula">
+                            <input v-model="nuevaAula" class="form-control mb-2" placeholder="Nombre (Ej: Aula 101)" required>
+                            <button class="btn btn-primary w-100">Agregar</button>
+                        </form>
+                    </div>
+                </div>
+                <div class="col-md-8">
+                    <table class="table table-bordered">
+                        <thead><tr><th>Aulas Registradas</th><th></th></tr></thead>
+                        <tbody>
+                            <tr v-for="a in aulas">
+                                <td>[[ a.nombre ]]</td>
+                                <td class="text-end"><button @click="borrarAula(a.id)" class="btn btn-sm btn-danger">X</button></td>
+                            </tr>
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+
+        <div class="tab-pane fade" id="materias">
+            <div class="row">
+                <div class="col-md-4">
+                    <div class="card p-3">
+                        <h5>Crear Materia</h5>
+                        <form @submit.prevent="crearMateria">
+                            <input v-model="nuevaMateria" class="form-control mb-2" placeholder="Nombre (Ej: Inglés)" required>
+                            <button class="btn btn-primary w-100">Agregar</button>
+                        </form>
+                    </div>
+                </div>
+                <div class="col-md-8">
+                    <table class="table table-bordered">
+                        <thead><tr><th>Materias Disponibles</th><th></th></tr></thead>
+                        <tbody>
+                            <tr v-for="m in materias_list">
+                                <td>[[ m.nombre ]]</td>
+                                <td class="text-end"><button @click="borrarMateria(m.id)" class="btn btn-sm btn-danger">X</button></td>
+                            </tr>
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+
+        <div class="tab-pane fade" id="profesores">
+            <div class="row">
+                <div class="col-md-4">
+                    <div class="card p-3">
+                        <h5>Nuevo Profesor</h5>
+                        <form @submit.prevent="guardarProfesor">
+                            <label>Cédula</label>
+                            <input v-model="formProfe.cedula" class="form-control mb-2" required>
+                            
+                            <label>Nombre</label>
+                            <input v-model="formProfe.nombre" class="form-control mb-2" required>
+                            
+                            <div class="row">
+                                <div class="col-6">
+                                    <label>Max Sem</label>
+                                    <input type="number" v-model="formProfe.max_horas_semana" class="form-control mb-2">
+                                </div>
+                                <div class="col-6">
+                                    <label>Max Día</label>
+                                    <input type="number" v-model="formProfe.max_horas_dia" class="form-control mb-2">
+                                </div>
+                            </div>
+
+                            <label class="fw-bold mt-2">¿Qué materias puede dar?</label>
+                            <div class="border p-2 mb-3" style="max_height: 150px; overflow-y: auto;">
+                                <div v-for="m in materias_list" :key="m.id" class="form-check">
+                                    <input class="form-check-input" type="checkbox" :value="m.id" v-model="formProfe.materias_ids">
+                                    <label class="form-check-label">[[ m.nombre ]]</label>
+                                </div>
+                            </div>
+
+                            <button class="btn btn-success w-100">Guardar Profesor</button>
+                        </form>
+                    </div>
+                </div>
+                
+                <div class="col-md-8">
+                    <table class="table table-striped">
+                        <thead><tr><th>Cédula</th><th>Nombre</th><th>Materias</th><th>Acción</th></tr></thead>
+                        <tbody>
+                            <tr v-for="p in profesores_list">
+                                <td>[[ p.cedula ]]</td>
+                                <td>[[ p.nombre ]]</td>
+                                <td><span class="badge bg-info text-dark">[[ p.materias ]]</span></td>
+                                <td><button @click="borrarProfesor(p.id)" class="btn btn-sm btn-danger">X</button></td>
+                            </tr>
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+
+    </div>
+</div>
+
+<script>
+    const { createApp } = Vue
+
+    createApp({
+        compilerOptions: { delimiters: ['[[', ']]'] },
+        data() {
+            return {
+                // Datos
+                aulas: [],
+                materias_list: [],
+                profesores_list: [],
+                // Formularios
+                nuevaAula: '',
+                nuevaMateria: '',
+                formProfe: {
+                    cedula: '', nombre: '', max_horas_semana: 20, max_horas_dia: 6, materias_ids: []
+                }
+            }
+        },
+        mounted() {
+            this.cargarTodo();
+        },
+        methods: {
+            async cargarTodo() {
+                this.aulas = await (await fetch('/api/aulas')).json();
+                this.materias_list = await (await fetch('/api/materias')).json();
+                this.profesores_list = await (await fetch('/api/profesores')).json();
+            },
+            // --- LOGICA AULAS ---
+            async crearAula() {
+                await fetch('/api/aulas', {
+                    method: 'POST', headers: {'Content-Type': 'application/json'},
+                    body: JSON.stringify({nombre: this.nuevaAula})
+                });
+                this.nuevaAula = ''; this.cargarTodo();
+            },
+            async borrarAula(id) {
+                await fetch('/api/aulas?id=' + id, {method: 'DELETE'});
+                this.cargarTodo();
+            },
+            // --- LOGICA MATERIAS ---
+            async crearMateria() {
+                await fetch('/api/materias', {
+                    method: 'POST', headers: {'Content-Type': 'application/json'},
+                    body: JSON.stringify({nombre: this.nuevaMateria})
+                });
+                this.nuevaMateria = ''; this.cargarTodo();
+            },
+            async borrarMateria(id) {
+                await fetch('/api/materias?id=' + id, {method: 'DELETE'});
+                this.cargarTodo();
+            },
+            // --- LOGICA PROFESORES ---
+            async guardarProfesor() {
+                if(this.formProfe.materias_ids.length === 0) {
+                    alert("Selecciona al menos una materia"); return;
+                }
+                const res = await fetch('/api/profesores', {
+                    method: 'POST', headers: {'Content-Type': 'application/json'},
+                    body: JSON.stringify(this.formProfe)
+                });
+                if(res.ok) {
+                    this.formProfe.cedula = ''; this.formProfe.nombre = ''; this.formProfe.materias_ids = [];
+                    this.cargarTodo();
+                    alert("Profesor Guardado");
+                } else {
+                    alert("Error (posible cédula duplicada)");
+                }
+            },
+            async borrarProfesor(id) {
+                if(confirm("¿Borrar?")) {
+                    await fetch('/api/profesores/' + id, {method: 'DELETE'});
+                    this.cargarTodo();
+                }
+            }
+        }
+    }).mount('#app')
+</script>
+{% endblock %}
