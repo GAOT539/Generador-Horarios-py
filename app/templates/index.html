@@ -3,15 +3,16 @@
 {% block content %}
 <div id="app">
     <div class="d-flex justify-content-between align-items-center mb-4">
-        <h2>📅 Horario General</h2>
-        <button @click="generarHorario" class="btn btn-primary btn-lg" :disabled="loading">
+        <h2 class="text-primary fw-bold">Calendario Semanal</h2>
+        
+        <button @click="generarHorario" class="btn btn-primary btn-lg shadow" :disabled="loading">
             <span v-if="loading" class="spinner-border spinner-border-sm"></span>
-            <span v-else>✨ Generar Horario Automático</span>
+            <span v-else>✨ Generar Horario</span>
         </button>
     </div>
 
-    <div class="card shadow">
-        <div class="card-body">
+    <div class="card shadow border-0">
+        <div class="card-body p-0">
             <div id="calendar"></div>
         </div>
     </div>
@@ -39,28 +40,37 @@
                 this.calendar = new FullCalendar.Calendar(calendarEl, {
                     initialView: 'timeGridWeek',
                     locale: 'es',
-                    hiddenDays: [0, 6], // Ocultar Domingo(0) y Sabado(6)
+                    hiddenDays: [0, 6], // Oculta Domingo y Sábado
                     slotMinTime: '07:00:00',
-                    slotMaxTime: '22:00:00',
+                    slotMaxTime: '21:00:00',
                     allDaySlot: false,
+                    expandRows: true, // Estira para llenar altura
+                    height: 'auto',
+                    
+                    // CAMBIO: Formato de encabezado de día (Solo nombre: "Lunes")
+                    dayHeaderFormat: { weekday: 'long' },
+                    
+                    // CAMBIO: Barra de herramientas limpia (sin título de fecha)
                     headerToolbar: {
                         left: '',
-                        center: 'title',
-                        right: 'timeGridWeek,timeGridDay'
+                        center: '', 
+                        right: ''
                     },
-                    // Fecha base fija para que siempre se vea la misma semana
-                    initialDate: '2023-11-20', 
-                    events: '/api/horario' // Carga automática desde nuestra API
+                    
+                    initialDate: '2023-11-20', // Fecha base interna para mostrar L-V
+                    events: '/api/horario',
+                    eventColor: '#3788d8'
                 });
                 this.calendar.render();
             },
             async generarHorario() {
                 const confirm = await Swal.fire({
                     title: '¿Generar nuevo horario?',
-                    text: "Se borrará el horario anterior y se calculará uno nuevo.",
+                    text: "Se borrará el horario actual y se creará uno nuevo.",
                     icon: 'question',
                     showCancelButton: true,
-                    confirmButtonText: 'Sí, generar'
+                    confirmButtonText: 'Sí, generar',
+                    cancelButtonText: 'Cancelar'
                 });
 
                 if (confirm.isConfirmed) {
@@ -71,12 +81,12 @@
                         
                         if (res.ok) {
                             Swal.fire('¡Éxito!', data.message, 'success');
-                            this.calendar.refetchEvents(); // Recargar calendario visualmente
+                            this.calendar.refetchEvents();
                         } else {
-                            Swal.fire('Error Matemático', data.message, 'error');
+                            Swal.fire('Error', data.message, 'error');
                         }
                     } catch (e) {
-                        Swal.fire('Error', 'Fallo de conexión con el servidor', 'error');
+                        Swal.fire('Error', 'Fallo de conexión', 'error');
                     } finally {
                         this.loading = false;
                     }

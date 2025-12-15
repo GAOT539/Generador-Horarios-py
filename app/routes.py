@@ -45,15 +45,16 @@ def manage_materias():
         })
     return jsonify(lista)
 
-# --- API PROFESORES (SIN CÉDULA) ---
+# --- API PROFESORES ---
 @bp.route('/api/profesores', methods=['GET'])
 def get_profesores():
     profes = []
     for p in Profesor.select():
-        materias_asignadas = [pm.materia.nombre for pm in p.competencias]
+        # CAMBIO AQUÍ: Agregamos el nivel al texto (Ej: "INGLES 1")
+        materias_asignadas = [f"{pm.materia.nombre} {pm.materia.nivel}" for pm in p.competencias]
+        
         profes.append({
             'id': p.id,
-            # ELIMINADO: 'cedula': p.cedula,
             'nombre': p.nombre,
             'max_horas_semana': p.max_horas_semana,
             'max_horas_dia': p.max_horas_dia,
@@ -66,7 +67,6 @@ def create_profesor():
     data = request.json
     with db.atomic():
         try:
-            # Creamos profesor sin cédula
             p = Profesor.create(
                 nombre=data['nombre'],
                 max_horas_semana=int(data['max_horas_semana']),
@@ -119,7 +119,7 @@ def generar():
 @bp.route('/api/horario', methods=['GET'])
 def get_horario():
     eventos = []
-    horarios = Horario.select()
+    horarios = Horario.select().join(Materia).switch(Horario).join(Profesor).switch(Horario).join(Curso)
     
     fechas_base = { 0: '2023-11-20', 1: '2023-11-21', 2: '2023-11-22', 3: '2023-11-23', 4: '2023-11-24' }
 
@@ -127,7 +127,8 @@ def get_horario():
         start = f"{h.hora_inicio:02d}:00:00"
         end = f"{h.hora_fin:02d}:00:00"
         
-        titulo = f"{h.materia.nombre}\n{h.profesor.nombre}\n{h.curso.nombre}"
+        # Formato (A) INGLES 1 JUAN PEREZ
+        titulo = f"({h.curso.nombre}) {h.materia.nombre} {h.materia.nivel}\n{h.profesor.nombre}"
         
         eventos.append({
             'title': titulo,

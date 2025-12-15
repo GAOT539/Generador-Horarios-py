@@ -105,4 +105,5 @@ school-scheduler-ortools/
 
 * No usar CDNs: todo funciona offline.
 * Si se cambian modelos, borrar `data/horarios.db`.
-* las horas deben ser las mismas. (luneas a jueves)
+* Las horas deben ser las mismas. (luneas a jueves)
+* Se elimino el modulo de Aulas.(Cambio en requerimientos)
