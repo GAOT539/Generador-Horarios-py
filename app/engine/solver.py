@@ -2,7 +2,7 @@ from ortools.sat.python import cp_model
 from app.models import Profesor, Materia, Curso, Horario, ProfesorMateria, db
 
 def generar_horario_automatico():
-    print("--- 1. Preparando entorno (Modo: Lunes a Jueves | Balanceado) ---")
+    print("--- 1. Preparando entorno (Modo: Lunes a Jueves | Restricción Horas) ---")
     
     with db.atomic():
         Horario.delete().execute()
@@ -18,25 +18,16 @@ def generar_horario_automatico():
         if m.cantidad_grupos > max_grupos_por_nivel[m.nivel]:
             max_grupos_por_nivel[m.nivel] = m.cantidad_grupos
 
-    # Lista extendida hasta la 'N' (14 letras)
     letras = ['A', 'B', 'C', 'D', 'E', 'F', 'G', 'H', 'I', 'J', 'K', 'L', 'M', 'N']
     
     with db.atomic():
         for nivel, cantidad in max_grupos_por_nivel.items():
-            # Límite estricto de 14 cursos máximo
             cantidad_real = min(cantidad, 14)
-            
             for i in range(cantidad_real):
                 letra = letras[i]
-                
-                # --- CAMBIO IMPORTANTE: LOGICA DE TURNOS BALANCEADA ---
-                # Usamos el operador módulo (%) para alternar:
-                # Si i es par (0, 2, 4...) -> Matutino (Cursos A, C, E...)
-                # Si i es impar (1, 3, 5...) -> Vespertino (Cursos B, D, F...)
+                # Turnos balanceados (A=Mat, B=Vesp, C=Mat...)
                 turno = 'Matutino' if i % 2 == 0 else 'Vespertino' 
-                
                 Curso.create(nombre=letra, nivel=nivel, turno=turno)
-                print(f"   -> Curso creado: {nivel}-{letra} ({turno})")
 
     # 3. Cargar datos
     profesores = list(Profesor.select())
@@ -49,7 +40,7 @@ def generar_horario_automatico():
     # 4. Configuración del Modelo Matemático
     model = cp_model.CpModel()
     
-    # Slots de 2 horas (Inicio del bloque)
+    # Slots de 2 horas
     slots_matutinos = [7, 9, 11]
     slots_vespertinos = [14, 16, 18]
 
@@ -63,7 +54,6 @@ def generar_horario_automatico():
 
     for materia in materias_planificadas:
         cursos_del_nivel = cursos_por_nivel.get(materia.nivel, [])
-        # También limitamos aquí por seguridad
         cursos_objetivo = cursos_del_nivel[:min(materia.cantidad_grupos, 14)]
 
         for curso in cursos_objetivo:
@@ -82,7 +72,6 @@ def generar_horario_automatico():
 
     print(f"Programando {len(clases_a_programar)} bloques de 2 horas...")
 
-    # CREACIÓN DE VARIABLES
     for clase_idx, clase in enumerate(clases_a_programar):
         curso = clase['curso']
         slots_posibles = slots_matutinos if curso.turno == 'Matutino' else slots_vespertinos
@@ -92,34 +81,44 @@ def generar_horario_automatico():
                 shifts[(clase_idx, p_id, slot)] = model.NewBoolVar(f'c{clase_idx}_p{p_id}_s{slot}')
 
     # --- RESTRICCIONES ---
+
     # 1. Cada clase 1 vez
     for c_idx in range(len(clases_a_programar)):
         vars_clase = [var for k, var in shifts.items() if k[0] == c_idx]
         model.Add(sum(vars_clase) == 1)
 
-    # 2. Conflictos Profe
+    # 2. Conflictos de Horario (Profe no puede clonarse)
     all_slots = slots_matutinos + slots_vespertinos
-    profes_ids = set(p.id for p in profesores)
-    for p_id in profes_ids:
+    profes_ids_unicos = set(p.id for p in profesores)
+    
+    for p_id in profes_ids_unicos:
         for slot in all_slots:
-            vars_profe = [var for k, var in shifts.items() if k[1] == p_id and k[2] == slot]
-            model.Add(sum(vars_profe) <= 1)
+            vars_profe_slot = [var for k, var in shifts.items() if k[1] == p_id and k[2] == slot]
+            model.Add(sum(vars_profe_slot) <= 1)
 
-    # 3. Conflictos Curso
+    # 3. Conflictos de Horario (Curso no puede recibir 2 clases a la vez)
     for curso in cursos:
         for slot in all_slots:
-            vars_curso = []
+            vars_curso_slot = []
             for k, var in shifts.items():
                 if clases_a_programar[k[0]]['curso'].id == curso.id and k[2] == slot:
-                    vars_curso.append(var)
-            model.Add(sum(vars_curso) <= 1)
+                    vars_curso_slot.append(var)
+            model.Add(sum(vars_curso_slot) <= 1)
+
+    # 4. RESTRICCIÓN DE MÁXIMAS HORAS DIARIAS (NUEVO)
+    # Suma de bloques asignados al profe * 2 <= max_horas_dia
+    for p in profesores:
+        vars_total_profe = [var for k, var in shifts.items() if k[1] == p.id]
+        if vars_total_profe:
+            # Multiplicamos por 2 porque cada bloque vale 2 horas
+            model.Add(sum(vars_total_profe) * 2 <= p.max_horas_dia)
 
     # --- SOLVER ---
     solver = cp_model.CpSolver()
     status = solver.Solve(model)
 
     if status == cp_model.OPTIMAL or status == cp_model.FEASIBLE:
-        print("¡Solución encontrada! Guardando Lunes-Jueves...")
+        print("¡Solución encontrada!")
         count = 0
         with db.atomic():
             for key, var in shifts.items():
@@ -127,7 +126,7 @@ def generar_horario_automatico():
                     c_idx, p_id, slot_inicio = key
                     datos = clases_a_programar[c_idx]
                     
-                    # REPLICACIÓN: 0=Lunes, 1=Martes, 2=Miércoles, 3=Jueves (Sin Viernes)
+                    # REPLICACIÓN (Lunes a Jueves)
                     for dia_semana in [0, 1, 2, 3]:
                         Horario.create(
                             dia=dia_semana,
@@ -138,6 +137,6 @@ def generar_horario_automatico():
                             curso_id=datos['curso'].id
                         )
                     count += 1
-        return {"status": "ok", "message": f"Horario generado (L-J). {count} bloques asignados."}
+        return {"status": "ok", "message": f"Horario generado. {count} bloques asignados respetando límites horarios."}
     
-    return {"status": "error", "message": "No se encontró solución."}
+    return {"status": "error", "message": "No se pudo generar. Posiblemente faltan profesores para cubrir la demanda sin exceder sus horas máximas."}

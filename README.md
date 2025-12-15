@@ -108,8 +108,8 @@ school-scheduler-ortools/
 * Las horas deben ser las mismas. (luneas a jueves)
 * Se elimino el modulo de Aulas.(Cambio en requerimientos)
 
-
 ## **📋 Aclaraciones**
 
 * El sistema asigna a los profesores conforme están enlistados en el panel de profesores (Existe la posibilidad de que un profesor no sea asignado a ningún horario).
+* 
 * Los cursos no están balanceados; es decir, no existe la misma cantidad en el horario matutino que en el vespertino.
