@@ -6,49 +6,21 @@
 
     <ul class="nav nav-tabs mb-4" id="myTab" role="tablist">
         <li class="nav-item">
-            <button class="nav-link active" data-bs-toggle="tab" data-bs-target="#aulas">🏢 1. Aulas</button>
+            <button class="nav-link active" data-bs-toggle="tab" data-bs-target="#materias">📚 1. Materias</button>
         </li>
         <li class="nav-item">
-            <button class="nav-link" data-bs-toggle="tab" data-bs-target="#materias">📚 2. Materias</button>
-        </li>
-        <li class="nav-item">
-            <button class="nav-link" data-bs-toggle="tab" data-bs-target="#profesores">👨‍🏫 3. Profesores</button>
+            <button class="nav-link" data-bs-toggle="tab" data-bs-target="#profesores">👨‍🏫 2. Profesores</button>
         </li>
     </ul>
 
     <div class="tab-content">
         
-        <div class="tab-pane fade show active" id="aulas">
-            <div class="row">
-                <div class="col-md-4">
-                    <div class="card p-3 shadow-sm">
-                        <h5>Crear Aula</h5>
-                        <form @submit.prevent="crearAula">
-                            <input v-model="nuevaAula" class="form-control mb-2" placeholder="Nombre (Ej: Aula 101)" required>
-                            <button class="btn btn-primary w-100">Agregar</button>
-                        </form>
-                    </div>
-                </div>
-                <div class="col-md-8">
-                    <table class="table table-bordered table-hover">
-                        <thead class="table-light"><tr><th>Aulas Registradas</th><th>Acción</th></tr></thead>
-                        <tbody>
-                            <tr v-for="a in aulas">
-                                <td>[[ a.nombre ]]</td>
-                                <td class="text-end"><button @click="borrarAula(a.id)" class="btn btn-sm btn-danger">🗑️</button></td>
-                            </tr>
-                        </tbody>
-                    </table>
-                </div>
-            </div>
-        </div>
-
-        <div class="tab-pane fade" id="materias">
+        <div class="tab-pane fade show active" id="materias">
             <div class="row">
                 <div class="col-md-4">
                     <div class="card p-3 shadow-sm border-primary">
                         <h5 class="text-primary">Planificar Demanda</h5>
-                        <p class="small text-muted">El sistema creará los cursos (A, B, C...) automáticamente según la cantidad que pongas aquí.</p>
+                        <p class="small text-muted">El sistema creará los cursos (A, B, C...) automáticamente según la cantidad.</p>
                         <form @submit.prevent="crearMateria">
                             <div class="mb-2">
                                 <label>Asignatura</label>
@@ -114,20 +86,38 @@
                     <div class="card p-3 shadow-sm">
                         <h5>Nuevo Profesor</h5>
                         <form @submit.prevent="guardarProfesor">
-                            <label>Cédula</label>
-                            <input v-model="formProfe.cedula" class="form-control mb-2" required>
                             
-                            <label>Nombre</label>
-                            <input v-model="formProfe.nombre" class="form-control mb-2" required>
+                            <label>Nombre Completo</label>
+                            <input 
+                                type="text" 
+                                v-model="formProfe.nombre" 
+                                class="form-control mb-2" 
+                                placeholder="Ej: JUAN PEREZ"
+                                style="text-transform: uppercase;"
+                                @input="validarNombreProfe"
+                                required
+                            >
                             
                             <div class="row">
                                 <div class="col-6">
-                                    <label>Max Sem</label>
-                                    <input type="number" v-model="formProfe.max_horas_semana" class="form-control mb-2">
+                                    <label>Max Semanal</label>
+                                    <input 
+                                        type="number" 
+                                        v-model="formProfe.max_horas_semana" 
+                                        class="form-control mb-2"
+                                        min="10" 
+                                        max="80"
+                                    >
                                 </div>
                                 <div class="col-6">
-                                    <label>Max Día</label>
-                                    <input type="number" v-model="formProfe.max_horas_dia" class="form-control mb-2">
+                                    <label>Max Diario</label>
+                                    <input 
+                                        type="number" 
+                                        v-model="formProfe.max_horas_dia" 
+                                        class="form-control mb-2"
+                                        min="2"
+                                        max="20"
+                                    >
                                 </div>
                             </div>
 
@@ -147,10 +137,9 @@
                 
                 <div class="col-md-8">
                     <table class="table table-striped table-hover">
-                        <thead class="table-light"><tr><th>Cédula</th><th>Nombre</th><th>Competencias</th><th>Acción</th></tr></thead>
+                        <thead class="table-light"><tr><th>Nombre</th><th>Competencias</th><th>Acción</th></tr></thead>
                         <tbody>
                             <tr v-for="p in profesores_list">
-                                <td>[[ p.cedula ]]</td>
                                 <td>[[ p.nombre ]]</td>
                                 <td><span class="badge bg-info text-dark">[[ p.materias ]]</span></td>
                                 <td><button @click="borrarProfesor(p.id)" class="btn btn-sm btn-danger">🗑️</button></td>
@@ -170,15 +159,13 @@
         compilerOptions: { delimiters: ['[[', ']]'] },
         data() {
             return {
-                aulas: [],
                 materias_list: [],
                 profesores_list: [],
                 
-                nuevaAula: '',
                 nuevaMateria: { nombre: '', nivel: 1, cantidad: 1 },
                 
                 formProfe: {
-                    cedula: '', nombre: '', max_horas_semana: 20, max_horas_dia: 6, materias_ids: []
+                    nombre: '', max_horas_semana: 20, max_horas_dia: 6, materias_ids: []
                 }
             }
         },
@@ -195,20 +182,12 @@
 
             async cargarTodo() {
                 try {
-                    this.aulas = await (await fetch('/api/aulas')).json();
                     this.materias_list = await (await fetch('/api/materias')).json();
                     this.profesores_list = await (await fetch('/api/profesores')).json();
                 } catch (e) { console.error(e); }
             },
 
-            async crearAula() {
-                await fetch('/api/aulas', { method: 'POST', headers: {'Content-Type': 'application/json'}, body: JSON.stringify({nombre: this.nuevaAula}) });
-                this.nuevaAula = ''; this.cargarTodo(); this.showSuccess('Aula creada');
-            },
-            async borrarAula(id) {
-                if(await this.confirmDelete()) { await fetch('/api/aulas?id=' + id, {method: 'DELETE'}); this.cargarTodo(); }
-            },
-
+            // --- MATERIAS ---
             async crearMateria() {
                 if(!this.nuevaMateria.nombre) { this.showError("Nombre obligatorio"); return; }
                 this.nuevaMateria.nombre = this.nuevaMateria.nombre.toUpperCase();
@@ -226,13 +205,48 @@
                 if(await this.confirmDelete()) { await fetch('/api/materias?id=' + id, {method: 'DELETE'}); this.cargarTodo(); }
             },
 
+            // --- PROFESORES ---
+            validarNombreProfe() {
+                this.formProfe.nombre = this.formProfe.nombre.replace(/[^a-zA-ZñÑáéíóúÁÉÍÓÚ\s]/g, '');
+            },
+
             async guardarProfesor() {
+                // 1. VALIDACIÓN DE HORAS (NUEVO)
+                const hSem = this.formProfe.max_horas_semana;
+                const hDia = this.formProfe.max_horas_dia;
+
+                // Validación Semanal (Min 10, Max 80)
+                if (hSem < 10) {
+                    this.showError("El mínimo de horas semanales es 10.");
+                    return;
+                }
+                if (hSem > 80) {
+                    this.showError("El máximo de horas semanales es 80.");
+                    return;
+                }
+
+                // Validación Diaria (Min 2, Max 20)
+                // NOTA PARA FUTURO: Aquí puedes modificar el límite máximo de 20 si lo requieres.
+                if (hDia < 2) {
+                    this.showError("El mínimo de horas diarias es de 2.");
+                    return;
+                }
+                if (hDia > 20) {
+                    this.showError("El máximo de horas diarias es 20.");
+                    return;
+                }
+
+                // 2. Validación de Materias
                 if(this.formProfe.materias_ids.length === 0) { this.showError("Selecciona materias"); return; }
+                
+                // 3. Guardado
+                this.formProfe.nombre = this.formProfe.nombre.toUpperCase();
+
                 const res = await fetch('/api/profesores', { method: 'POST', headers: {'Content-Type': 'application/json'}, body: JSON.stringify(this.formProfe) });
                 if(res.ok) {
-                    this.formProfe.cedula = ''; this.formProfe.nombre = ''; this.formProfe.materias_ids = [];
+                    this.formProfe.nombre = ''; this.formProfe.materias_ids = [];
                     this.cargarTodo(); this.showSuccess('Profesor OK');
-                } else { this.showError("Error (Cédula duplicada)"); }
+                } else { this.showError("Error al guardar"); }
             },
             async borrarProfesor(id) {
                 if(await this.confirmDelete()) { await fetch('/api/profesores/' + id, {method: 'DELETE'}); this.cargarTodo(); }

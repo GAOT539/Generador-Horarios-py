@@ -5,30 +5,23 @@ class BaseModel(Model):
     class Meta:
         database = db
 
-# --- 1. INFRAESTRUCTURA ---
-class Aula(BaseModel):
-    nombre = CharField(unique=True) 
-    tipo = CharField(default="General") 
-
-# --- 2. ACADÉMICO ---
+# --- 1. ACADÉMICO ---
 class Materia(BaseModel):
-    nombre = CharField() # Ej: "Inglés", "Italiano"
-    nivel = IntegerField() # 1, 2, 3, 4
-    # Esto responde a tu pedido: "Quiero 3 cursos de Inglés 1"
+    nombre = CharField() 
+    nivel = IntegerField() 
     cantidad_grupos = IntegerField(default=1) 
     
-    # Restricción: No puedes crear dos veces "Inglés Nivel 1"
     class Meta:
         indexes = ((('nombre', 'nivel'), True),)
 
 class Curso(BaseModel):
-    nombre = CharField() # "A", "B", "C"
+    nombre = CharField() 
     nivel = IntegerField() 
     turno = CharField() 
 
-# --- 3. DOCENTES ---
+# --- 2. DOCENTES ---
 class Profesor(BaseModel):
-    cedula = CharField(unique=True)
+    # ELIMINADO: cedula = CharField(unique=True)
     nombre = CharField()
     max_horas_semana = IntegerField(default=20)
     max_horas_dia = IntegerField(default=6)
@@ -39,17 +32,16 @@ class ProfesorMateria(BaseModel):
     class Meta:
         indexes = ((('profesor', 'materia'), True),)
 
-# --- 4. RESULTADO (HORARIO) ---
+# --- 3. RESULTADO (HORARIO) ---
 class Horario(BaseModel):
     dia = IntegerField()      
     hora_inicio = IntegerField()
     hora_fin = IntegerField()    
     profesor = ForeignKeyField(Profesor)
     materia = ForeignKeyField(Materia)
-    aula = ForeignKeyField(Aula)
     curso = ForeignKeyField(Curso)
 
 def inicializar_db():
     db.connect()
-    db.create_tables([Aula, Materia, Curso, Profesor, ProfesorMateria, Horario], safe=True)
+    db.create_tables([Materia, Curso, Profesor, ProfesorMateria, Horario], safe=True)
     db.close()
