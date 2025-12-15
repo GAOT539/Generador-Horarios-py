@@ -2,7 +2,7 @@ from ortools.sat.python import cp_model
 from app.models import Profesor, Materia, Curso, Horario, ProfesorMateria, db
 
 def generar_horario_automatico():
-    print("--- 1. Preparando entorno (Modo: Lunes a Jueves | Cursos A-N) ---")
+    print("--- 1. Preparando entorno (Modo: Lunes a Jueves | Balanceado) ---")
     
     with db.atomic():
         Horario.delete().execute()
@@ -18,21 +18,22 @@ def generar_horario_automatico():
         if m.cantidad_grupos > max_grupos_por_nivel[m.nivel]:
             max_grupos_por_nivel[m.nivel] = m.cantidad_grupos
 
-    # CAMBIO: Lista extendida hasta la 'N' (14 letras)
+    # Lista extendida hasta la 'N' (14 letras)
     letras = ['A', 'B', 'C', 'D', 'E', 'F', 'G', 'H', 'I', 'J', 'K', 'L', 'M', 'N']
     
     with db.atomic():
         for nivel, cantidad in max_grupos_por_nivel.items():
-            # CAMBIO: Límite estricto de 14 cursos máximo
+            # Límite estricto de 14 cursos máximo
             cantidad_real = min(cantidad, 14)
             
             for i in range(cantidad_real):
                 letra = letras[i]
                 
-                # LOGICA DE TURNOS:
-                # A, B (índices 0, 1) -> Matutino
-                # C en adelante -> Vespertino
-                turno = 'Matutino' if i < 2 else 'Vespertino' 
+                # --- CAMBIO IMPORTANTE: LOGICA DE TURNOS BALANCEADA ---
+                # Usamos el operador módulo (%) para alternar:
+                # Si i es par (0, 2, 4...) -> Matutino (Cursos A, C, E...)
+                # Si i es impar (1, 3, 5...) -> Vespertino (Cursos B, D, F...)
+                turno = 'Matutino' if i % 2 == 0 else 'Vespertino' 
                 
                 Curso.create(nombre=letra, nivel=nivel, turno=turno)
                 print(f"   -> Curso creado: {nivel}-{letra} ({turno})")
@@ -62,7 +63,7 @@ def generar_horario_automatico():
 
     for materia in materias_planificadas:
         cursos_del_nivel = cursos_por_nivel.get(materia.nivel, [])
-        # También limitamos aquí por si acaso, aunque ya filtramos al crear cursos
+        # También limitamos aquí por seguridad
         cursos_objetivo = cursos_del_nivel[:min(materia.cantidad_grupos, 14)]
 
         for curso in cursos_objetivo:
