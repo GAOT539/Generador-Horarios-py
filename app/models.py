@@ -21,8 +21,8 @@ class Curso(BaseModel):
 
 # --- 2. DOCENTES ---
 class Profesor(BaseModel):
-    # ELIMINADO: cedula = CharField(unique=True)
-    nombre = CharField()
+    # AHORA EL NOMBRE ES ÚNICO PARA EVITAR DUPLICADOS
+    nombre = CharField(unique=True)
     max_horas_semana = IntegerField(default=20)
     max_horas_dia = IntegerField(default=6)
 

@@ -30,8 +30,11 @@ def manage_materias():
             
     if request.method == 'DELETE':
         materia_id = request.args.get('id')
-        ProfesorMateria.delete().where(ProfesorMateria.materia == materia_id).execute()
-        Materia.delete().where(Materia.id == materia_id).execute()
+        with db.atomic():
+            # Limpieza en cascada manual para seguridad
+            Horario.delete().where(Horario.materia == materia_id).execute()
+            ProfesorMateria.delete().where(ProfesorMateria.materia == materia_id).execute()
+            Materia.delete().where(Materia.id == materia_id).execute()
         return jsonify({'status': 'ok'})
 
     materias = Materia.select().order_by(Materia.nombre, Materia.nivel)
@@ -64,6 +67,11 @@ def get_profesores():
 @bp.route('/api/profesores', methods=['POST'])
 def create_profesor():
     data = request.json
+    
+    # Validación: Evitar nombres duplicados
+    if Profesor.select().where(Profesor.nombre == data['nombre']).exists():
+        return jsonify({'error': f"El profesor {data['nombre']} ya existe."}), 400
+
     with db.atomic():
         try:
             p = Profesor.create(
@@ -79,9 +87,21 @@ def create_profesor():
 
 @bp.route('/api/profesores/<int:id>', methods=['DELETE'])
 def delete_profesor(id):
-    ProfesorMateria.delete().where(ProfesorMateria.profesor == id).execute()
-    Profesor.delete().where(Profesor.id == id).execute()
-    return jsonify({'status': 'ok'})
+    try:
+        # CORRECCIÓN IMPORTANTE: Borrado Atómico y en Cascada
+        with db.atomic():
+            # 1. Borrar clases del horario asignadas a este profesor
+            Horario.delete().where(Horario.profesor == id).execute()
+            
+            # 2. Borrar sus competencias (relación materia-profesor)
+            ProfesorMateria.delete().where(ProfesorMateria.profesor == id).execute()
+            
+            # 3. Finalmente borrar al profesor
+            Profesor.delete().where(Profesor.id == id).execute()
+            
+        return jsonify({'status': 'ok'})
+    except Exception as e:
+        return jsonify({'error': f"Error al borrar: {str(e)}"}), 400
 
 # --- API CURSOS ---
 @bp.route('/api/cursos', methods=['GET', 'POST', 'DELETE'])
@@ -120,7 +140,6 @@ def get_horario():
     eventos = []
     horarios = Horario.select().join(Materia).switch(Horario).join(Profesor).switch(Horario).join(Curso)
     
-    # 0=Lunes, 3=Jueves
     fechas_base = { 
         0: '2023-11-20', 
         1: '2023-11-21', 
@@ -141,7 +160,6 @@ def get_horario():
             'start': f"{fechas_base[h.dia]}T{start}",
             'end': f"{fechas_base[h.dia]}T{end}",
             'color': '#3788d8' if h.curso.turno == 'Matutino' else '#28a745',
-            # NUEVO: Propiedades extendidas para filtrar en el Frontend
             'extendedProps': {
                 'materia_id': h.materia.id,
                 'profesor_id': h.profesor.id,
@@ -151,15 +169,12 @@ def get_horario():
         
     return jsonify(eventos)
 
-# --- NUEVO: SISTEMA DE RESPALDO (BACKUP) ---
+# --- BACKUP ---
 @bp.route('/api/backup', methods=['GET'])
 def backup_data():
-    # 1. Extraer datos (Excluyendo Horario)
     materias = list(Materia.select().dicts())
-    
     profesores_data = []
     for p in Profesor.select():
-        # Guardamos nombres de materias, no IDs, para que sea portable
         competencias = [f"{pm.materia.nombre}|{pm.materia.nivel}" for pm in p.competencias]
         profesores_data.append({
             'nombre': p.nombre,
@@ -168,14 +183,12 @@ def backup_data():
             'competencias': competencias
         })
 
-    # Estructura del Backup
     backup = {
-        'system_signature': 'GENERADOR_HORARIOS_V1', # Firma de seguridad
+        'system_signature': 'GENERADOR_HORARIOS_V1',
         'materias': materias,
         'profesores': profesores_data
     }
     
-    # Devolver como archivo descargable
     return Response(
         json.dumps(backup, indent=2),
         mimetype="application/json",
@@ -190,8 +203,6 @@ def restore_data():
     file = request.files['file']
     try:
         data = json.load(file)
-        
-        # VALIDACIÓN DE SEGURIDAD
         if data.get('system_signature') != 'GENERADOR_HORARIOS_V1':
             return jsonify({'error': 'Firma inválida. Este archivo no pertenece a este sistema.'}), 400
         
@@ -199,15 +210,14 @@ def restore_data():
         if not all(key in data for key in required_keys):
             return jsonify({'error': 'Estructura corrupta. Faltan datos clave.'}), 400
 
-        # RESTAURACIÓN (Borra todo lo anterior)
+        
         with db.atomic():
             Horario.delete().execute()
             ProfesorMateria.delete().execute()
             Profesor.delete().execute()
             Materia.delete().execute()
-            Curso.delete().execute() # Se regenerarán solos
+            Curso.delete().execute()
 
-            # 1. Restaurar Materias
             print(f"Restaurando {len(data['materias'])} materias...")
             for m in data['materias']:
                 Materia.create(
@@ -215,8 +225,7 @@ def restore_data():
                     nivel=m['nivel'],
                     cantidad_grupos=m['cantidad_grupos']
                 )
-
-            # 2. Restaurar Profesores
+            
             print(f"Restaurando {len(data['profesores'])} profesores...")
             for p in data['profesores']:
                 nuevo_profe = Profesor.create(
@@ -224,14 +233,9 @@ def restore_data():
                     max_horas_semana=p['max_horas_semana'],
                     max_horas_dia=p['max_horas_dia']
                 )
-                
-                # Reconectar materias por Nombre+Nivel
                 for comp_str in p['competencias']:
                     nombre_mat, nivel_mat = comp_str.split('|')
-                    # Buscar la materia que acabamos de crear
-                    materia_obj = Materia.get_or_none(
-                        (Materia.nombre == nombre_mat) & (Materia.nivel == int(nivel_mat))
-                    )
+                    materia_obj = Materia.get_or_none((Materia.nombre == nombre_mat) & (Materia.nivel == int(nivel_mat)))
                     if materia_obj:
                         ProfesorMateria.create(profesor=nuevo_profe, materia=materia_obj)
         
