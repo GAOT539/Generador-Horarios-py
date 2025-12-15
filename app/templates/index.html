@@ -1,21 +1,78 @@
 {% extends "base.html" %}
 
 {% block content %}
-<div id="app">
-    <div class="d-flex justify-content-between align-items-center mb-4">
-        <h2 class="text-primary fw-bold">Calendario (Lunes - Jueves)</h2>
-        <button @click="generarHorario" class="btn btn-primary btn-lg shadow" :disabled="loading">
-            <span v-if="loading" class="spinner-border spinner-border-sm"></span>
-            <span v-else>✨ Generar Horario</span>
-        </button>
-    </div>
-
-    <div class="card shadow border-0">
-        <div class="card-body p-0">
-            <div id="calendar"></div>
+<div id="app" style="height: calc(100vh - 100px); display: flex; flex-direction: column;">
+    
+    <div class="d-flex justify-content-between align-items-center mb-3">
+        <h2 class="text-primary fw-bold m-0">Calendario (Lunes - Jueves)</h2>
+        
+        <div class="d-flex gap-2">
+            <button @click="generarHorario" class="btn btn-primary shadow-sm" :disabled="loading">
+                <span v-if="loading" class="spinner-border spinner-border-sm"></span>
+                <span v-else>✨ Generar Nuevo</span>
+            </button>
+            
+            <button class="btn btn-outline-secondary shadow-sm" @click="toggleSidebar">
+                <span v-if="sidebarOpen">Cerrar Filtros ❌</span>
+                <span v-else>Filtrar 🔍</span>
+            </button>
         </div>
     </div>
+
+    <div class="d-flex flex-grow-1 position-relative overflow-hidden shadow border rounded">
+        
+        <div class="flex-grow-1 p-3 bg-white" style="overflow-y: auto;">
+            <div id="calendar"></div>
+        </div>
+
+        <div class="sidebar-filtros bg-light border-start p-3" :class="{ 'open': sidebarOpen }">
+            <h5 class="mb-3 fw-bold text-secondary">🔍 Filtrar Horario</h5>
+            
+            <div class="mb-3">
+                <label class="form-label small fw-bold">Por Materia</label>
+                <select v-model="filtros.materia" class="form-select shadow-sm" @change="aplicarFiltros">
+                    <option value="">-- Todas --</option>
+                    <option v-for="m in materias_list" :value="m.id">[[ m.nombre ]] (Niv. [[ m.nivel ]])</option>
+                </select>
+            </div>
+
+            <div class="mb-3">
+                <label class="form-label small fw-bold">Por Profesor</label>
+                <select v-model="filtros.profesor" class="form-select shadow-sm" @change="aplicarFiltros">
+                    <option value="">-- Todos --</option>
+                    <option v-for="p in profesores_list" :value="p.id">[[ p.nombre ]]</option>
+                </select>
+            </div>
+
+            <hr>
+
+            <div class="d-grid">
+                <button class="btn btn-sm btn-outline-dark" @click="limpiarFiltros">
+                    Limpiar Filtros 🗑️
+                </button>
+            </div>
+
+            <div class="mt-4 alert alert-info small">
+                <i class="fas fa-info-circle"></i> 
+                Se están mostrando <strong>[[ eventosVisibles ]]</strong> clases.
+            </div>
+        </div>
+
+    </div>
 </div>
+
+<style>
+    .sidebar-filtros {
+        width: 300px;
+        background-color: #f8f9fa;
+        transition: margin-right 0.3s ease-in-out;
+        margin-right: -300px; /* Oculto por defecto */
+        min-width: 300px;
+    }
+    .sidebar-filtros.open {
+        margin-right: 0; /* Visible */
+    }
+</style>
 
 <script src='https://cdn.jsdelivr.net/npm/fullcalendar@6.1.10/index.global.min.js'></script>
 
@@ -24,36 +81,102 @@
 
     createApp({
         compilerOptions: { delimiters: ['[[', ']]'] },
-        data() { return { loading: false, calendar: null } },
-        mounted() { this.iniciarCalendario(); },
+        data() {
+            return {
+                loading: false,
+                sidebarOpen: false, // Estado del menú lateral
+                calendar: null,
+                
+                // Datos crudos
+                allEvents: [],
+                materias_list: [],
+                profesores_list: [],
+
+                // Estado de filtros
+                filtros: {
+                    materia: '',
+                    profesor: ''
+                },
+                eventosVisibles: 0
+            }
+        },
+        mounted() {
+            this.iniciarCalendario();
+            this.cargarDatosFiltros();
+        },
         methods: {
+            toggleSidebar() {
+                this.sidebarOpen = !this.sidebarOpen;
+                // Pequeño hack para que el calendario se ajuste al nuevo ancho
+                setTimeout(() => { this.calendar.updateSize(); }, 310);
+            },
+
+            async cargarDatosFiltros() {
+                try {
+                    // Cargamos listas para los selects
+                    this.materias_list = await (await fetch('/api/materias')).json();
+                    this.profesores_list = await (await fetch('/api/profesores')).json();
+                    
+                    // Cargamos los eventos (pero no los ponemos en el calendario aún)
+                    this.cargarEventos();
+                } catch (e) { console.error("Error cargando filtros", e); }
+            },
+
+            async cargarEventos() {
+                try {
+                    const res = await fetch('/api/horario');
+                    this.allEvents = await res.json();
+                    this.aplicarFiltros(); // Esto llenará el calendario
+                } catch (e) { console.error("Error cargando horario", e); }
+            },
+
+            aplicarFiltros() {
+                // Filtramos en memoria
+                const filtrados = this.allEvents.filter(e => {
+                    const passMateria = !this.filtros.materia || e.extendedProps.materia_id === this.filtros.materia;
+                    const passProfe = !this.filtros.profesor || e.extendedProps.profesor_id === this.filtros.profesor;
+                    return passMateria && passProfe;
+                });
+
+                this.eventosVisibles = filtrados.length;
+
+                // Actualizamos FullCalendar
+                if (this.calendar) {
+                    this.calendar.removeAllEvents();
+                    this.calendar.addEventSource(filtrados);
+                }
+            },
+
+            limpiarFiltros() {
+                this.filtros.materia = '';
+                this.filtros.profesor = '';
+                this.aplicarFiltros();
+            },
+
             iniciarCalendario() {
                 var calendarEl = document.getElementById('calendar');
                 this.calendar = new FullCalendar.Calendar(calendarEl, {
                     initialView: 'timeGridWeek',
                     locale: 'es',
-                    // CAMBIO: Ocultar Domingo(0), Viernes(5) y Sábado(6)
-                    hiddenDays: [0, 5, 6], 
+                    hiddenDays: [0, 5, 6], // Oculta Dom, Vie, Sab
                     slotMinTime: '07:00:00',
                     slotMaxTime: '21:00:00',
                     allDaySlot: false,
                     expandRows: true,
-                    height: 'auto',
+                    height: '100%', // Ocupa todo el alto disponible
                     dayHeaderFormat: { weekday: 'long' },
-                    
-                    // CAMBIO: Botones para ver Semana o Día
                     headerToolbar: {
                         left: '',
                         center: '', 
                         right: 'timeGridWeek,timeGridDay'
                     },
-                    
                     initialDate: '2023-11-20',
-                    events: '/api/horario',
+                    // events: ... YA NO SE USA AQUÍ, lo manejamos manual con addEventSource
                     eventColor: '#3788d8'
                 });
                 this.calendar.render();
             },
+
             async generarHorario() {
                 const confirm = await Swal.fire({
                     title: '¿Generar nuevo horario?',
@@ -70,7 +193,7 @@
                         const data = await res.json();
                         if (res.ok) {
                             Swal.fire('¡Éxito!', data.message, 'success');
-                            this.calendar.refetchEvents();
+                            this.cargarEventos(); // Recargar datos
                         } else {
                             Swal.fire('Error', data.message, 'error');
                         }

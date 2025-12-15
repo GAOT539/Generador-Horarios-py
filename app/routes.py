@@ -120,16 +120,16 @@ def get_horario():
     eventos = []
     horarios = Horario.select().join(Materia).switch(Horario).join(Profesor).switch(Horario).join(Curso)
     
-    # 0=Lunes, 3=Jueves (Viernes eliminado)
+    # 0=Lunes, 3=Jueves
     fechas_base = { 
-        0: '2023-11-20', # Lunes
+        0: '2023-11-20', 
         1: '2023-11-21', 
         2: '2023-11-22', 
         3: '2023-11-23'
     }
 
     for h in horarios:
-        if h.dia not in fechas_base: continue # Seguridad por si hay datos viejos
+        if h.dia not in fechas_base: continue
         
         start = f"{h.hora_inicio:02d}:00:00"
         end = f"{h.hora_fin:02d}:00:00"
@@ -140,7 +140,13 @@ def get_horario():
             'title': titulo,
             'start': f"{fechas_base[h.dia]}T{start}",
             'end': f"{fechas_base[h.dia]}T{end}",
-            'color': '#3788d8' if h.curso.turno == 'Matutino' else '#28a745'
+            'color': '#3788d8' if h.curso.turno == 'Matutino' else '#28a745',
+            # NUEVO: Propiedades extendidas para filtrar en el Frontend
+            'extendedProps': {
+                'materia_id': h.materia.id,
+                'profesor_id': h.profesor.id,
+                'curso_turno': h.curso.turno
+            }
         })
         
     return jsonify(eventos)
