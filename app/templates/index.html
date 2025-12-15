@@ -3,8 +3,7 @@
 {% block content %}
 <div id="app">
     <div class="d-flex justify-content-between align-items-center mb-4">
-        <h2 class="text-primary fw-bold">Calendario Semanal</h2>
-        
+        <h2 class="text-primary fw-bold">Calendario (Lunes - Jueves)</h2>
         <button @click="generarHorario" class="btn btn-primary btn-lg shadow" :disabled="loading">
             <span v-if="loading" class="spinner-border spinner-border-sm"></span>
             <span v-else>✨ Generar Horario</span>
@@ -25,39 +24,31 @@
 
     createApp({
         compilerOptions: { delimiters: ['[[', ']]'] },
-        data() {
-            return {
-                loading: false,
-                calendar: null
-            }
-        },
-        mounted() {
-            this.iniciarCalendario();
-        },
+        data() { return { loading: false, calendar: null } },
+        mounted() { this.iniciarCalendario(); },
         methods: {
             iniciarCalendario() {
                 var calendarEl = document.getElementById('calendar');
                 this.calendar = new FullCalendar.Calendar(calendarEl, {
                     initialView: 'timeGridWeek',
                     locale: 'es',
-                    hiddenDays: [0, 6], // Oculta Domingo y Sábado
+                    // CAMBIO: Ocultar Domingo(0), Viernes(5) y Sábado(6)
+                    hiddenDays: [0, 5, 6], 
                     slotMinTime: '07:00:00',
                     slotMaxTime: '21:00:00',
                     allDaySlot: false,
-                    expandRows: true, // Estira para llenar altura
+                    expandRows: true,
                     height: 'auto',
-                    
-                    // CAMBIO: Formato de encabezado de día (Solo nombre: "Lunes")
                     dayHeaderFormat: { weekday: 'long' },
                     
-                    // CAMBIO: Barra de herramientas limpia (sin título de fecha)
+                    // CAMBIO: Botones para ver Semana o Día
                     headerToolbar: {
                         left: '',
                         center: '', 
-                        right: ''
+                        right: 'timeGridWeek,timeGridDay'
                     },
                     
-                    initialDate: '2023-11-20', // Fecha base interna para mostrar L-V
+                    initialDate: '2023-11-20',
                     events: '/api/horario',
                     eventColor: '#3788d8'
                 });
@@ -69,8 +60,7 @@
                     text: "Se borrará el horario actual y se creará uno nuevo.",
                     icon: 'question',
                     showCancelButton: true,
-                    confirmButtonText: 'Sí, generar',
-                    cancelButtonText: 'Cancelar'
+                    confirmButtonText: 'Sí, generar'
                 });
 
                 if (confirm.isConfirmed) {
@@ -78,7 +68,6 @@
                     try {
                         const res = await fetch('/api/generar', {method: 'POST'});
                         const data = await res.json();
-                        
                         if (res.ok) {
                             Swal.fire('¡Éxito!', data.message, 'success');
                             this.calendar.refetchEvents();

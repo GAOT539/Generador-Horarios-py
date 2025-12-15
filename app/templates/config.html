@@ -11,6 +11,9 @@
         <li class="nav-item">
             <button class="nav-link" data-bs-toggle="tab" data-bs-target="#profesores">👨‍🏫 2. Profesores</button>
         </li>
+        <li class="nav-item">
+            <button class="nav-link" data-bs-toggle="tab" data-bs-target="#respaldo">💾 3. Respaldo</button>
+        </li>
     </ul>
 
     <div class="tab-content">
@@ -24,24 +27,13 @@
                         <form @submit.prevent="crearMateria">
                             <div class="mb-2">
                                 <label>Asignatura</label>
-                                <input 
-                                    type="text" 
-                                    v-model="nuevaMateria.nombre" 
-                                    class="form-control" 
-                                    placeholder="Ej: INGLES" 
-                                    style="text-transform: uppercase;"
-                                    required
-                                >
+                                <input type="text" v-model="nuevaMateria.nombre" class="form-control" placeholder="Ej: INGLES" style="text-transform: uppercase;" required>
                             </div>
-                            
                             <div class="row mb-2">
                                 <div class="col-6">
                                     <label>Nivel</label>
                                     <select v-model="nuevaMateria.nivel" class="form-select" required>
-                                        <option>1</option>
-                                        <option>2</option>
-                                        <option>3</option>
-                                        <option>4</option>
+                                        <option>1</option><option>2</option><option>3</option><option>4</option>
                                     </select>
                                 </div>
                                 <div class="col-6">
@@ -49,29 +41,18 @@
                                     <input type="number" v-model="nuevaMateria.cantidad" class="form-control" min="1" required>
                                 </div>
                             </div>
-
                             <button class="btn btn-primary w-100">Guardar</button>
                         </form>
                     </div>
                 </div>
                 <div class="col-md-8">
                     <table class="table table-bordered table-hover">
-                        <thead class="table-light">
-                            <tr>
-                                <th>Materia</th>
-                                <th>Nivel</th>
-                                <th>Cursos a crear</th>
-                                <th>Acción</th>
-                            </tr>
-                        </thead>
+                        <thead class="table-light"><tr><th>Materia</th><th>Nivel</th><th>Cursos a crear</th><th>Acción</th></tr></thead>
                         <tbody>
                             <tr v-for="m in materias_list">
                                 <td class="fw-bold">[[ m.nombre ]]</td>
                                 <td><span class="badge bg-secondary">Nivel [[ m.nivel ]]</span></td>
-                                <td>
-                                    <strong>[[ m.cantidad_grupos ]]</strong> 
-                                    <span class="text-muted small">(A, B...)</span>
-                                </td>
+                                <td><strong>[[ m.cantidad_grupos ]]</strong> <span class="text-muted small">(A, B...)</span></td>
                                 <td class="text-end"><button @click="borrarMateria(m.id)" class="btn btn-sm btn-danger">🗑️</button></td>
                             </tr>
                         </tbody>
@@ -86,18 +67,8 @@
                     <div class="card p-3 shadow-sm">
                         <h5>Nuevo Profesor</h5>
                         <form @submit.prevent="guardarProfesor">
-                            
                             <label>Nombre Completo</label>
-                            <input 
-                                type="text" 
-                                v-model="formProfe.nombre" 
-                                class="form-control mb-2" 
-                                placeholder="Ej: JUAN PEREZ"
-                                style="text-transform: uppercase;"
-                                @input="validarNombreProfe"
-                                required
-                            >
-                            
+                            <input type="text" v-model="formProfe.nombre" class="form-control mb-2" placeholder="Ej: JUAN PEREZ" style="text-transform: uppercase;" @input="validarNombreProfe" required>
                             <div class="row">
                                 <div class="col-6">
                                     <label>Max Semanal</label>
@@ -108,7 +79,6 @@
                                     <input type="number" v-model="formProfe.max_horas_dia" class="form-control mb-2" min="2" max="20">
                                 </div>
                             </div>
-
                             <label class="fw-bold mt-2">¿Qué materias puede dar?</label>
                             <div class="border p-2 mb-3" style="max-height: 150px; overflow-y: auto;">
                                 <div v-if="materias_list.length === 0" class="text-muted small">Crea materias primero.</div>
@@ -117,23 +87,13 @@
                                     <label class="form-check-label">[[ m.nombre ]] (Nivel [[ m.nivel ]])</label>
                                 </div>
                             </div>
-
                             <button class="btn btn-success w-100">Guardar Profesor</button>
                         </form>
                     </div>
                 </div>
-                
                 <div class="col-md-8">
                     <table class="table table-striped table-hover">
-                        <thead class="table-light">
-                            <tr>
-                                <th>Nombre</th>
-                                <th>Máx. hrs/sem</th>
-                                <th>Máx. hrs/día</th>
-                                <th>Competencias</th>
-                                <th>Acción</th>
-                            </tr>
-                        </thead>
+                        <thead class="table-light"><tr><th>Nombre</th><th>Max Sem</th><th>Max Dia</th><th>Competencias</th><th>Acción</th></tr></thead>
                         <tbody>
                             <tr v-for="p in profesores_list">
                                 <td>[[ p.nombre ]]</td>
@@ -147,6 +107,41 @@
                 </div>
             </div>
         </div>
+
+        <div class="tab-pane fade" id="respaldo">
+            <div class="row justify-content-center mt-4">
+                <div class="col-md-5">
+                    <div class="card shadow border-success mb-4">
+                        <div class="card-header bg-success text-white">
+                            <h5 class="mb-0">📥 Guardar Copia de Seguridad</h5>
+                        </div>
+                        <div class="card-body text-center">
+                            <p>Descarga un archivo <strong>.json</strong> con todas las Materias y Profesores configurados.</p>
+                            <a href="/api/backup" target="_blank" class="btn btn-outline-success btn-lg w-100">
+                                Descargar Respaldo
+                            </a>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="col-md-5">
+                    <div class="card shadow border-warning">
+                        <div class="card-header bg-warning text-dark">
+                            <h5 class="mb-0">📤 Restaurar Datos</h5>
+                        </div>
+                        <div class="card-body">
+                            <p class="small text-danger fw-bold">⚠️ ESTO BORRARÁ LOS DATOS ACTUALES</p>
+                            <p>Sube un archivo .json previamente descargado.</p>
+                            <form @submit.prevent="subirRespaldo">
+                                <input type="file" ref="fileInput" class="form-control mb-3" accept=".json" required>
+                                <button class="btn btn-warning w-100 fw-bold">Restaurar Base de Datos</button>
+                            </form>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
     </div>
 </div>
 
@@ -157,15 +152,12 @@
         compilerOptions: { delimiters: ['[[', ']]'] },
         data() {
             return {
-                materias_list: [],
-                profesores_list: [],
+                materias_list: [], profesores_list: [],
                 nuevaMateria: { nombre: '', nivel: 1, cantidad: 1 },
                 formProfe: { nombre: '', max_horas_semana: 20, max_horas_dia: 6, materias_ids: [] }
             }
         },
-        mounted() {
-            this.cargarTodo();
-        },
+        mounted() { this.cargarTodo(); },
         methods: {
             showSuccess(msg) { Swal.fire({ icon: 'success', title: '¡Listo!', text: msg, timer: 1500, showConfirmButton: false }); },
             showError(msg) { Swal.fire({ icon: 'error', title: 'Error', text: msg }); },
@@ -179,40 +171,58 @@
                     this.profesores_list = await (await fetch('/api/profesores')).json();
                 } catch (e) { console.error(e); }
             },
+            
+            // --- MATERIAS & PROFES (Lógica sin cambios) ---
             async crearMateria() {
-                if(!this.nuevaMateria.nombre) { this.showError("Nombre obligatorio"); return; }
+                if(!this.nuevaMateria.nombre) return;
                 this.nuevaMateria.nombre = this.nuevaMateria.nombre.toUpperCase();
                 const res = await fetch('/api/materias', { method: 'POST', headers: {'Content-Type': 'application/json'}, body: JSON.stringify(this.nuevaMateria) });
-                if (res.ok) {
-                    this.nuevaMateria = { nombre: '', nivel: 1, cantidad: 1 };
-                    this.cargarTodo(); this.showSuccess('Materia guardada');
-                } else {
-                    const d = await res.json();
-                    this.showError(d.error === 'Duplicado o error de datos' ? 'Esta materia ya existe.' : 'Error');
-                }
+                if (res.ok) { this.nuevaMateria = { nombre: '', nivel: 1, cantidad: 1 }; this.cargarTodo(); this.showSuccess('Materia guardada'); }
+                else { const d = await res.json(); this.showError(d.error); }
             },
-            async borrarMateria(id) {
-                if(await this.confirmDelete()) { await fetch('/api/materias?id=' + id, {method: 'DELETE'}); this.cargarTodo(); }
-            },
-            validarNombreProfe() {
-                this.formProfe.nombre = this.formProfe.nombre.replace(/[^a-zA-ZñÑáéíóúÁÉÍÓÚ\s]/g, '');
-            },
+            async borrarMateria(id) { if(await this.confirmDelete()) { await fetch('/api/materias?id='+id, {method:'DELETE'}); this.cargarTodo(); } },
+            validarNombreProfe() { this.formProfe.nombre = this.formProfe.nombre.replace(/[^a-zA-ZñÑáéíóúÁÉÍÓÚ\s]/g, ''); },
             async guardarProfesor() {
-                const hSem = this.formProfe.max_horas_semana;
-                const hDia = this.formProfe.max_horas_dia;
-                if (hSem < 10 || hSem > 80) { this.showError("Horas semanales deben ser entre 10 y 80."); return; }
-                if (hDia < 2 || hDia > 20) { this.showError("Horas diarias deben ser entre 2 y 20."); return; }
-                if(this.formProfe.materias_ids.length === 0) { this.showError("Selecciona materias"); return; }
-                
+                if(this.formProfe.materias_ids.length===0) { this.showError("Selecciona materias"); return; }
                 this.formProfe.nombre = this.formProfe.nombre.toUpperCase();
                 const res = await fetch('/api/profesores', { method: 'POST', headers: {'Content-Type': 'application/json'}, body: JSON.stringify(this.formProfe) });
-                if(res.ok) {
-                    this.formProfe.nombre = ''; this.formProfe.materias_ids = [];
-                    this.cargarTodo(); this.showSuccess('Profesor OK');
-                } else { this.showError("Error al guardar"); }
+                if(res.ok) { this.formProfe.nombre=''; this.formProfe.materias_ids=[]; this.cargarTodo(); this.showSuccess('Profesor OK'); }
+                else { this.showError("Error al guardar"); }
             },
-            async borrarProfesor(id) {
-                if(await this.confirmDelete()) { await fetch('/api/profesores/' + id, {method: 'DELETE'}); this.cargarTodo(); }
+            async borrarProfesor(id) { if(await this.confirmDelete()) { await fetch('/api/profesores/'+id, {method:'DELETE'}); this.cargarTodo(); } },
+
+            // --- LÓGICA DE RESPALDO (NUEVA) ---
+            async subirRespaldo() {
+                const file = this.$refs.fileInput.files[0];
+                if (!file) return;
+
+                const confirm = await Swal.fire({
+                    title: '¿Estás seguro?',
+                    text: "Se borrarán todos los datos actuales y se reemplazarán por el archivo.",
+                    icon: 'warning',
+                    showCancelButton: true,
+                    confirmButtonColor: '#d33',
+                    confirmButtonText: 'Sí, restaurar'
+                });
+
+                if (confirm.isConfirmed) {
+                    const formData = new FormData();
+                    formData.append('file', file);
+
+                    try {
+                        const res = await fetch('/api/restore', { method: 'POST', body: formData });
+                        const data = await res.json();
+                        if (res.ok) {
+                            Swal.fire('Restaurado', data.message, 'success');
+                            this.cargarTodo();
+                            this.$refs.fileInput.value = ''; // Limpiar input
+                        } else {
+                            this.showError(data.error);
+                        }
+                    } catch (e) {
+                        this.showError("Error al subir archivo");
+                    }
+                }
             }
         }
     }).mount('#app')

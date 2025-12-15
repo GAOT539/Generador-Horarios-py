@@ -1,6 +1,7 @@
-from flask import Blueprint, render_template, request, jsonify
+from flask import Blueprint, render_template, request, jsonify, Response
 from app.models import Profesor, Materia, ProfesorMateria, db, Horario, Curso
 from app.engine.solver import generar_horario_automatico
+import json
 
 bp = Blueprint('main', __name__)
 
@@ -24,7 +25,7 @@ def manage_materias():
                 cantidad_grupos=int(data['cantidad'])
             )
             return jsonify({'status': 'ok'})
-        except Exception as e:
+        except Exception:
             return jsonify({'error': 'Duplicado o error de datos'}), 400
             
     if request.method == 'DELETE':
@@ -50,9 +51,7 @@ def manage_materias():
 def get_profesores():
     profes = []
     for p in Profesor.select():
-        # CAMBIO AQUÍ: Agregamos el nivel al texto (Ej: "INGLES 1")
         materias_asignadas = [f"{pm.materia.nombre} {pm.materia.nivel}" for pm in p.competencias]
-        
         profes.append({
             'id': p.id,
             'nombre': p.nombre,
@@ -115,19 +114,26 @@ def generar():
     else:
         return jsonify(resultado), 400
 
-# --- API LEER HORARIO ---
+# --- API LEER HORARIO (SOLO LUNES-JUEVES) ---
 @bp.route('/api/horario', methods=['GET'])
 def get_horario():
     eventos = []
     horarios = Horario.select().join(Materia).switch(Horario).join(Profesor).switch(Horario).join(Curso)
     
-    fechas_base = { 0: '2023-11-20', 1: '2023-11-21', 2: '2023-11-22', 3: '2023-11-23', 4: '2023-11-24' }
+    # 0=Lunes, 3=Jueves (Viernes eliminado)
+    fechas_base = { 
+        0: '2023-11-20', # Lunes
+        1: '2023-11-21', 
+        2: '2023-11-22', 
+        3: '2023-11-23'
+    }
 
     for h in horarios:
+        if h.dia not in fechas_base: continue # Seguridad por si hay datos viejos
+        
         start = f"{h.hora_inicio:02d}:00:00"
         end = f"{h.hora_fin:02d}:00:00"
         
-        # Formato (A) INGLES 1 JUAN PEREZ
         titulo = f"({h.curso.nombre}) {h.materia.nombre} {h.materia.nivel}\n{h.profesor.nombre}"
         
         eventos.append({
@@ -138,3 +144,94 @@ def get_horario():
         })
         
     return jsonify(eventos)
+
+# --- NUEVO: SISTEMA DE RESPALDO (BACKUP) ---
+@bp.route('/api/backup', methods=['GET'])
+def backup_data():
+    # 1. Extraer datos (Excluyendo Horario)
+    materias = list(Materia.select().dicts())
+    
+    profesores_data = []
+    for p in Profesor.select():
+        # Guardamos nombres de materias, no IDs, para que sea portable
+        competencias = [f"{pm.materia.nombre}|{pm.materia.nivel}" for pm in p.competencias]
+        profesores_data.append({
+            'nombre': p.nombre,
+            'max_horas_semana': p.max_horas_semana,
+            'max_horas_dia': p.max_horas_dia,
+            'competencias': competencias
+        })
+
+    # Estructura del Backup
+    backup = {
+        'system_signature': 'GENERADOR_HORARIOS_V1', # Firma de seguridad
+        'materias': materias,
+        'profesores': profesores_data
+    }
+    
+    # Devolver como archivo descargable
+    return Response(
+        json.dumps(backup, indent=2),
+        mimetype="application/json",
+        headers={"Content-disposition": "attachment; filename=respaldo_configuracion.json"}
+    )
+
+@bp.route('/api/restore', methods=['POST'])
+def restore_data():
+    if 'file' not in request.files:
+        return jsonify({'error': 'No se subió ningún archivo'}), 400
+    
+    file = request.files['file']
+    try:
+        data = json.load(file)
+        
+        # VALIDACIÓN DE SEGURIDAD
+        if data.get('system_signature') != 'GENERADOR_HORARIOS_V1':
+            return jsonify({'error': 'Firma inválida. Este archivo no pertenece a este sistema.'}), 400
+        
+        required_keys = ['materias', 'profesores']
+        if not all(key in data for key in required_keys):
+            return jsonify({'error': 'Estructura corrupta. Faltan datos clave.'}), 400
+
+        # RESTAURACIÓN (Borra todo lo anterior)
+        with db.atomic():
+            Horario.delete().execute()
+            ProfesorMateria.delete().execute()
+            Profesor.delete().execute()
+            Materia.delete().execute()
+            Curso.delete().execute() # Se regenerarán solos
+
+            # 1. Restaurar Materias
+            print(f"Restaurando {len(data['materias'])} materias...")
+            for m in data['materias']:
+                Materia.create(
+                    nombre=m['nombre'],
+                    nivel=m['nivel'],
+                    cantidad_grupos=m['cantidad_grupos']
+                )
+
+            # 2. Restaurar Profesores
+            print(f"Restaurando {len(data['profesores'])} profesores...")
+            for p in data['profesores']:
+                nuevo_profe = Profesor.create(
+                    nombre=p['nombre'],
+                    max_horas_semana=p['max_horas_semana'],
+                    max_horas_dia=p['max_horas_dia']
+                )
+                
+                # Reconectar materias por Nombre+Nivel
+                for comp_str in p['competencias']:
+                    nombre_mat, nivel_mat = comp_str.split('|')
+                    # Buscar la materia que acabamos de crear
+                    materia_obj = Materia.get_or_none(
+                        (Materia.nombre == nombre_mat) & (Materia.nivel == int(nivel_mat))
+                    )
+                    if materia_obj:
+                        ProfesorMateria.create(profesor=nuevo_profe, materia=materia_obj)
+        
+        return jsonify({'status': 'ok', 'message': 'Base de datos restaurada correctamente.'})
+
+    except json.JSONDecodeError:
+        return jsonify({'error': 'El archivo no es un JSON válido'}), 400
+    except Exception as e:
+        return jsonify({'error': f'Error procesando datos: {str(e)}'}), 500
