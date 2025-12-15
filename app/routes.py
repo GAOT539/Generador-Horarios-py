@@ -245,3 +245,61 @@ def restore_data():
         return jsonify({'error': 'El archivo no es un JSON válido'}), 400
     except Exception as e:
         return jsonify({'error': f'Error procesando datos: {str(e)}'}), 500
+
+# --- NUEVAS RUTAS PARA REPORTES ---
+@bp.route('/reportes')
+def reportes():
+    return render_template('reportes.html')
+
+@bp.route('/api/estadisticas', methods=['GET'])
+def get_estadisticas():
+    # 1. Calcular carga horaria real por profesor
+    # Cada entrada en Horario es un bloque de 2 horas (según tu lógica actual)
+    conteo_bloques = {}
+    
+    # Traemos todos los horarios
+    asignaciones = Horario.select()
+    
+    for h in asignaciones:
+        p_id = h.profesor.id
+        if p_id not in conteo_bloques:
+            conteo_bloques[p_id] = 0
+        conteo_bloques[p_id] += 1
+
+    # 2. Construir reporte comparativo
+    profesores = Profesor.select()
+    reporte = []
+    
+    for p in profesores:
+        bloques_asignados = conteo_bloques.get(p.id, 0)
+        horas_reales = bloques_asignados * 2 # Cada bloque vale 2 horas
+        
+        estado = "OK"
+        if horas_reales == 0:
+            estado = "SIN_CARGA"
+        elif horas_reales > p.max_horas_semana:
+            estado = "SOBRECARGA" # No debería pasar por el solver, pero por seguridad
+        elif horas_reales < (p.max_horas_semana * 0.5): # Menos del 50%
+            estado = "SUBUTILIZADO"
+
+        reporte.append({
+            'id': p.id,
+            'nombre': p.nombre,
+            'horas_asignadas': horas_reales,
+            'horas_maximas': p.max_horas_semana,
+            'estado': estado,
+            'porcentaje': round((horas_reales / p.max_horas_semana) * 100, 1) if p.max_horas_semana > 0 else 0
+        })
+
+    # 3. Datos adicionales del sistema
+    total_clases = len(asignaciones)
+    materias_sin_asignar = 0 # (Lógica futura si se requiere)
+
+    return jsonify({
+        'profesores': reporte,
+        'resumen': {
+            'total_profesores': len(profesores),
+            'total_clases_semanales': total_clases,
+            'profesores_sin_carga': len([x for x in reporte if x['estado'] == 'SIN_CARGA'])
+        }
+    })

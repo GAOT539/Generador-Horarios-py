@@ -1,0 +1,266 @@
+{% extends "base.html" %}
+
+{% block content %}
+<div id="app">
+    <h2 class="mb-4">📊 Reportes y Exportación</h2>
+
+    <div class="card shadow mb-5">
+        <div class="card-header bg-dark text-white d-flex justify-content-between align-items-center">
+            <h5 class="mb-0">Auditoría de Profesores</h5>
+            <button @click="imprimirReporteGeneral" class="btn btn-sm btn-light">🖨️ Imprimir Reporte</button>
+        </div>
+        <div class="card-body">
+            <div class="row mb-3">
+                <div class="col-md-4">
+                    <div class="alert alert-primary text-center">
+                        <h3>[[ resumen.total_clases_semanales ]]</h3>
+                        <small>Bloques de Clases Asignados</small>
+                    </div>
+                </div>
+                <div class="col-md-4">
+                    <div class="alert alert-success text-center">
+                        <h3>[[ resumen.total_profesores ]]</h3>
+                        <small>Profesores Totales</small>
+                    </div>
+                </div>
+                <div class="col-md-4">
+                    <div class="alert" :class="resumen.profesores_sin_carga > 0 ? 'alert-danger' : 'alert-secondary'">
+                        <h3 class="text-center">[[ resumen.profesores_sin_carga ]]</h3>
+                        <small class="d-block text-center">Profesores sin Carga</small>
+                    </div>
+                </div>
+            </div>
+
+            <div class="table-responsive">
+                <table class="table table-bordered table-hover align-middle">
+                    <thead class="table-light">
+                        <tr>
+                            <th>Profesor</th>
+                            <th class="text-center">Horas Reales / Máx</th>
+                            <th>Ocupación</th>
+                            <th class="text-center">Estado</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        <tr v-for="p in reporte_profesores" :key="p.id">
+                            <td class="fw-bold">[[ p.nombre ]]</td>
+                            <td class="text-center">
+                                <span class="badge bg-primary fs-6">[[ p.horas_asignadas ]] hrs</span>
+                                <span class="text-muted mx-2">de</span>
+                                <span>[[ p.horas_maximas ]] hrs</span>
+                            </td>
+                            <td>
+                                <div class="progress" style="height: 20px;">
+                                    <div class="progress-bar" 
+                                         :class="getColorBarra(p.porcentaje)"
+                                         role="progressbar" 
+                                         :style="{width: p.porcentaje + '%'}">
+                                        [[ p.porcentaje ]]%
+                                    </div>
+                                </div>
+                            </td>
+                            <td class="text-center">
+                                <span v-if="p.estado == 'SIN_CARGA'" class="badge bg-danger">Sin Asignación ⚠️</span>
+                                <span v-else-if="p.estado == 'SUBUTILIZADO'" class="badge bg-warning text-dark">Baja Carga</span>
+                                <span v-else class="badge bg-success">Óptimo</span>
+                            </td>
+                        </tr>
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+
+    <div class="row">
+        <div class="col-md-6">
+            <div class="card shadow h-100 border-primary">
+                <div class="card-header bg-primary text-white">
+                    <h5 class="mb-0">👤 Horario Individual</h5>
+                </div>
+                <div class="card-body">
+                    <p class="text-muted">Genera un PDF con el horario detallado de un solo docente.</p>
+                    <label>Seleccionar Profesor:</label>
+                    <select v-model="profeSeleccionado" class="form-select mb-3">
+                        <option value="">-- Elige uno --</option>
+                        <option v-for="p in reporte_profesores" :value="p.id">[[ p.nombre ]]</option>
+                    </select>
+                    <button @click="imprimirHorarioProfesor" class="btn btn-primary w-100" :disabled="!profeSeleccionado">
+                        📄 Generar PDF Profesor
+                    </button>
+                </div>
+            </div>
+        </div>
+
+        <div class="col-md-6">
+            <div class="card shadow h-100 border-success">
+                <div class="card-header bg-success text-white">
+                    <h5 class="mb-0">🎓 Horario por Nivel</h5>
+                </div>
+                <div class="card-body">
+                    <p class="text-muted">Genera un PDF con todos los cursos de un nivel (Ej: Todos los de Nivel 1).</p>
+                    <label>Seleccionar Nivel:</label>
+                    <select v-model="nivelSeleccionado" class="form-select mb-3">
+                        <option value="">-- Elige Nivel --</option>
+                        <option value="1">Nivel 1</option>
+                        <option value="2">Nivel 2</option>
+                        <option value="3">Nivel 3</option>
+                        <option value="4">Nivel 4</option>
+                    </select>
+                    <button @click="imprimirHorarioNivel" class="btn btn-success w-100" :disabled="!nivelSeleccionado">
+                        📄 Generar PDF Nivel
+                    </button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+</div>
+
+<div id="print-area" class="d-none"></div>
+
+<script>
+    const { createApp } = Vue
+
+    createApp({
+        compilerOptions: { delimiters: ['[[', ']]'] },
+        data() {
+            return {
+                reporte_profesores: [],
+                resumen: {},
+                horarios_raw: [],
+                profeSeleccionado: '',
+                nivelSeleccionado: ''
+            }
+        },
+        mounted() {
+            this.cargarDatos();
+        },
+        methods: {
+            async cargarDatos() {
+                // 1. Estadísticas
+                const resStats = await fetch('/api/estadisticas');
+                const dataStats = await resStats.json();
+                this.reporte_profesores = dataStats.profesores;
+                this.resumen = dataStats.resumen;
+
+                // 2. Horarios completos (para poder filtrar y generar PDFs)
+                const resHorario = await fetch('/api/horario');
+                this.horarios_raw = await resHorario.json();
+            },
+
+            getColorBarra(p) {
+                if(p < 30) return 'bg-warning text-dark';
+                if(p > 90) return 'bg-danger';
+                return 'bg-success';
+            },
+
+            // --- LÓGICA DE IMPRESIÓN (PDF) ---
+            
+            // Función genérica para abrir ventana de impresión
+            printHTML(titulo, contenidoHTML) {
+                const printWindow = window.open('', '', 'height=600,width=800');
+                printWindow.document.write('<html><head><title>' + titulo + '</title>');
+                // Estilos básicos para el PDF
+                printWindow.document.write(`
+                    <style>
+                        body { font-family: sans-serif; padding: 20px; }
+                        h1 { text-align: center; color: #333; }
+                        table { width: 100%; border-collapse: collapse; margin-top: 20px; }
+                        th, td { border: 1px solid #999; padding: 8px; text-align: center; font-size: 12px; }
+                        th { background-color: #eee; }
+                        .header { margin-bottom: 20px; border-bottom: 2px solid #333; padding-bottom: 10px; }
+                        .turno-tag { padding: 2px 5px; border-radius: 4px; font-size: 10px; color: white; }
+                        .mat { background-color: #3788d8; }
+                        .vesp { background-color: #28a745; }
+                    </style>
+                `);
+                printWindow.document.write('</head><body>');
+                printWindow.document.write(contenidoHTML);
+                printWindow.document.write('</body></html>');
+                printWindow.document.close();
+                printWindow.print();
+            },
+
+            imprimirReporteGeneral() {
+                let html = `<h1>Reporte de Carga Docente</h1>`;
+                html += `<table><thead><tr><th>Profesor</th><th>Horas Asig.</th><th>Horas Max.</th><th>Estado</th></tr></thead><tbody>`;
+                this.reporte_profesores.forEach(p => {
+                    html += `<tr><td>${p.nombre}</td><td>${p.horas_asignadas}</td><td>${p.horas_maximas}</td><td>${p.estado}</td></tr>`;
+                });
+                html += `</tbody></table>`;
+                this.printHTML('Reporte General', html);
+            },
+
+            imprimirHorarioProfesor() {
+                // Filtrar eventos del profe
+                const eventos = this.horarios_raw.filter(h => h.extendedProps.profesor_id == this.profeSeleccionado);
+                const nombreProfe = this.reporte_profesores.find(p => p.id == this.profeSeleccionado).nombre;
+
+                if(eventos.length === 0) {
+                    Swal.fire('Aviso', 'Este profesor no tiene horarios asignados.', 'warning');
+                    return;
+                }
+
+                // Generar Tabla Semanal
+                let html = `<div class="header"><h1>Horario Individual</h1><h2>Profesor: ${nombreProfe}</h2></div>`;
+                html += this.generarTablaHorario(eventos);
+                
+                this.printHTML(`Horario - ${nombreProfe}`, html);
+            },
+
+            imprimirHorarioNivel() {
+                // Filtrar eventos por nivel (buscando en el título o extendedProps si lo tuvieramos, aquí parseamos el titulo es mas rapido)
+                // Truco: En el titulo viene "INGLES 1", buscamos el " 1"
+                const nivelStr = " " + this.nivelSeleccionado; 
+                const eventos = this.horarios_raw.filter(h => h.title.includes(nivelStr)); // Filtro básico por string
+
+                if(eventos.length === 0) {
+                    Swal.fire('Aviso', 'No hay clases para este nivel.', 'warning');
+                    return;
+                }
+
+                let html = `<div class="header"><h1>Horario Grupal</h1><h2>Nivel ${this.nivelSeleccionado}</h2></div>`;
+                html += this.generarTablaHorario(eventos);
+                
+                this.printHTML(`Horario - Nivel ${this.nivelSeleccionado}`, html);
+            },
+
+            // Helper para dibujar la tabla Lunes-Jueves
+            generarTablaHorario(eventos) {
+                // Mapeo de slots a filas
+                const slots = [7, 9, 11, 14, 16, 18];
+                const dias = ['Lunes', 'Martes', 'Miércoles', 'Jueves'];
+                const fechasMap = {'2023-11-20': 0, '2023-11-21': 1, '2023-11-22': 2, '2023-11-23': 3};
+
+                let table = `<table><thead><tr><th>Hora</th><th>Lunes</th><th>Martes</th><th>Miércoles</th><th>Jueves</th></tr></thead><tbody>`;
+
+                slots.forEach(slot => {
+                    table += `<tr><td><strong>${slot}:00 - ${slot+2}:00</strong></td>`;
+                    dias.forEach((dia, index) => {
+                        // Buscar evento que coincida con dia (index) y hora (slot)
+                        // FullCalendar usa fechas ISO, necesitamos matchear el dia
+                        const evento = eventos.find(e => {
+                            const fecha = e.start.split('T')[0];
+                            const hora = parseInt(e.start.split('T')[1].split(':')[0]);
+                            return fechasMap[fecha] === index && hora === slot;
+                        });
+
+                        if (evento) {
+                            // Limpiamos el título para que se vea bien en PDF
+                            // (A) INGLES 1 \n PROFESOR -> (A) INGLES 1 <br> PROFESOR
+                            const contenido = evento.title.replace('\n', '<br>');
+                            const colorClass = evento.color === '#3788d8' ? 'mat' : 'vesp';
+                            table += `<td class="${colorClass}" style="color:white;">${contenido}</td>`;
+                        } else {
+                            table += `<td>-</td>`;
+                        }
+                    });
+                    table += `</tr>`;
+                });
+                table += `</tbody></table>`;
+                return table;
+            }
+        }
+    }).mount('#app')
+</script>
+{% endblock %}
