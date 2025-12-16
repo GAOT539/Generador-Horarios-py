@@ -24,7 +24,7 @@ Este proyecto está diseñado para cumplir estrictamente con las siguientes regl
 
 * **Materias:** Definidas por nombre (Ej: Inglés, Italiano, Francés).
 * **Cursos y Niveles:** Combinación de letra y nivel (Ej: Nivel 1 - Curso A).
-* **Aulas:** Espacios físicos limitados. El sistema no puede asignar más clases que aulas disponibles.
+* **Aulas:** Espacios físicos limitados. El sistema no puede asignar más clases que aulas disponibles. (Se omite aulas)
 
 ### 2. Jornadas (Turnos)
 
@@ -108,14 +108,14 @@ school-scheduler-ortools/
 * Las horas deben ser las mismas. (luneas a jueves)
 * Se elimino el modulo de Aulas.(Cambio en requerimientos)
 
-### **📋 Aclaraciones**
+**📋 Aclaraciones**
 
 * El sistema asigna a los profesores conforme están enlistados en el panel de profesores (Existe la posibilidad de que un profesor no sea asignado a ningún horario).
 * Los cursos no están balanceados; es decir, no existe la misma cantidad en el horario matutino que en el vespertino.
 
 ## 📋 PLAN DE MODIFICACIONES Y NUEVOS REQUERIMIENTOS
 
-1. GESTIÓN DE MODALIDADES EN MATERIAS
+### * GESTIÓN DE MODALIDADES EN MATERIAS
 
 ---
 
@@ -130,7 +130,7 @@ El sistema debe distinguir explícitamente entre dos modalidades académicas:
   - 2 cursos para MODALIDAD EN LÍNEA.
     (Puede existir una materia que solo tenga cursos presenciales, solo online, o ambos).
 
-2. REGLAS DE HORARIOS Y TURNOS
+### * REGLAS DE HORARIOS Y TURNOS
 
 ---
 
@@ -155,7 +155,7 @@ El sistema debe distinguir explícitamente entre dos modalidades académicas:
   - Restricción: Máximo 4 horas por día en fin de semana.
   - Bloque permitido: 07:00 a 11:00.
 
-3. REGLAS DE ASIGNACIÓN DOCENTE Y RESTRICCIONES
+### * REGLAS DE ASIGNACIÓN DOCENTE Y RESTRICCIONES
 
 ---
 
@@ -175,7 +175,7 @@ El sistema debe distinguir explícitamente entre dos modalidades académicas:
   - [Descanso/Traslado obligatorio de 09:00 a 11:00]
   - 11:00 - 13:00: PROGRAMA REGULAR (Universidad)
 
-4. VISUALIZACIÓN EN CALENDARIO
+### * VISUALIZACIÓN EN CALENDARIO
 
 ---
 
