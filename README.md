@@ -108,8 +108,79 @@ school-scheduler-ortools/
 * Las horas deben ser las mismas. (luneas a jueves)
 * Se elimino el modulo de Aulas.(Cambio en requerimientos)
 
-## **📋 Aclaraciones**
+### **📋 Aclaraciones**
 
 * El sistema asigna a los profesores conforme están enlistados en el panel de profesores (Existe la posibilidad de que un profesor no sea asignado a ningún horario).
-* 
 * Los cursos no están balanceados; es decir, no existe la misma cantidad en el horario matutino que en el vespertino.
+
+## 📋 PLAN DE MODIFICACIONES Y NUEVOS REQUERIMIENTOS
+
+1. GESTIÓN DE MODALIDADES EN MATERIAS
+
+---
+
+El sistema debe distinguir explícitamente entre dos modalidades académicas:
+   A. PROGRAMA REGULAR (Presencial) - Opción por defecto.
+   B. MODALIDAD EN LÍNEA (Online).
+
+- Configuración de la Demanda:
+  En el apartado de configuración de materias, se debe permitir definir la cantidad de cursos por separado para cada modalidad.
+  Ejemplo: "INGLES Nivel 1" puede tener configurado:
+  - 5 cursos para PROGRAMA REGULAR.
+  - 2 cursos para MODALIDAD EN LÍNEA.
+    (Puede existir una materia que solo tenga cursos presenciales, solo online, o ambos).
+
+2. REGLAS DE HORARIOS Y TURNOS
+
+---
+
+- Horario Vespertino General:
+  Se ajusta el rango vespertino para operar de 13:00 a 19:00 (1 PM a 7 PM).
+- Distribución de Cursos (Balanceo de Horarios):
+  Se debe evitar agrupar todos los cursos en el primer horario de la mañana. La asignación debe alternar los bloques horarios disponibles.
+  Ejemplo de distribución deseada:
+
+  - Curso 1: Mañana (07:00 - 09:00)
+  - Curso 2: Tarde  (13:00 - 15:00)
+  - Curso 3: Mañana (09:00 - 11:00)
+  - Curso 4: Tarde  (15:00 - 17:00)
+- Preferencia Horaria para MODALIDAD EN LÍNEA:
+  Los cursos online deben priorizar los siguientes bloques:
+
+  - Mañana: 07:00 - 09:00
+  - Noche:  19:00 - 21:00
+- Horarios de Fin de Semana (Exclusivo Online):
+  Si un curso es MODALIDAD EN LÍNEA, debe tener la posibilidad de asignarse a Sábados y Domingos.
+
+  - Restricción: Máximo 4 horas por día en fin de semana.
+  - Bloque permitido: 07:00 a 11:00.
+
+3. REGLAS DE ASIGNACIÓN DOCENTE Y RESTRICCIONES
+
+---
+
+- Asignación de Carga Óptima:
+  El algoritmo debe garantizar que ningún profesor quede "Sin Asignación" o con "Baja Carga" si hay demanda disponible, respetando siempre su límite máximo de horas semanales (no exceder bajo ninguna circunstancia).
+- Preferencia de Horarios Consecutivos:
+  El sistema debe priorizar asignar clases seguidas al mismo profesor para evitar huecos innecesarios.
+  Ejemplo ideal:
+
+  - 07:00 a 09:00: (A) Inglés 1
+  - 09:00 a 11:00: (B) Inglés 2
+- REGLA CRÍTICA DE DESPLAZAMIENTO (Gap de 2 Horas):
+  Si un profesor tiene asignados cursos de ambas modalidades (Presencial y Online) en el MISMO DÍA, debe existir obligatoriamente un intervalo mínimo de 2 horas entre el cambio de modalidad para permitir el desplazamiento.
+  Ejemplo:
+
+  - 07:00 - 09:00: MODALIDAD EN LÍNEA (Casa)
+  - [Descanso/Traslado obligatorio de 09:00 a 11:00]
+  - 11:00 - 13:00: PROGRAMA REGULAR (Universidad)
+
+4. VISUALIZACIÓN EN CALENDARIO
+
+---
+
+El módulo de calendario debe presentar la información dividida claramente según la modalidad:
+
+- Vista o sección para PROGRAMA REGULAR.
+- Vista o sección para MODALIDAD EN LÍNEA.
+  Esto permitirá identificar rápidamente la carga presencial vs. la virtual.

@@ -21,7 +21,7 @@
         <div class="tab-pane fade show active" id="materias">
             <div class="row">
                 <div class="col-md-4">
-                    <div class="card p-3 shadow-sm border-primary">
+                    <div class="card p-3 shadow-sm border-primary mb-3">
                         <h5 class="text-primary">Planificar Demanda</h5>
                         <p class="small text-muted">El sistema creará los cursos (A, B, C...) automáticamente según la cantidad.</p>
                         <form @submit.prevent="crearMateria">
@@ -34,6 +34,7 @@
                                     <label>Nivel</label>
                                     <select v-model="nuevaMateria.nivel" class="form-select" required>
                                         <option>1</option><option>2</option><option>3</option><option>4</option>
+                                        <option>5</option><option>6</option><option>7</option><option>8</option>
                                     </select>
                                 </div>
                                 <div class="col-6">
@@ -44,7 +45,22 @@
                             <button class="btn btn-primary w-100">Guardar</button>
                         </form>
                     </div>
+
+                    <div class="card shadow-sm border-secondary bg-light">
+                        <div class="card-body p-3">
+                            <h6 class="fw-bold text-secondary">ℹ️ Referencia de Niveles</h6>
+                            <ul class="list-unstyled small mb-0">
+                                <li><strong>Nivel 1:</strong> A1 – Principiante</li>
+                                <li><strong>Nivel 2:</strong> A2 – Elemental</li>
+                                <li><strong>Nivel 3:</strong> B1 – Pre-intermedio</li>
+                                <li><strong>Nivel 4:</strong> B1+ – Intermedio</li>
+                                <li><strong>Nivel 5:</strong> B2 – Intermedio Alto</li>
+                                <li><strong>Nivel 6-8:</strong> Avanzados (C1, C1+, C2)</li>
+                            </ul>
+                        </div>
+                    </div>
                 </div>
+
                 <div class="col-md-8">
                     <table class="table table-bordered table-hover">
                         <thead class="table-light"><tr><th>Materia</th><th>Nivel</th><th>Cursos a crear</th><th>Acción</th></tr></thead>
@@ -67,32 +83,14 @@
                     <div class="card p-3 shadow-sm">
                         <h5>Nuevo Profesor</h5>
                         <form @submit.prevent="guardarProfesor">
-                            
                             <label>Nombre Completo</label>
-                            <input 
-                                type="text" 
-                                v-model="formProfe.nombre" 
-                                class="form-control mb-2" 
-                                placeholder="Ej: JUAN PEREZ"
-                                style="text-transform: uppercase;"
-                                @input="validarNombreProfe"
-                                required
-                            >
+                            <input type="text" v-model="formProfe.nombre" class="form-control mb-2" placeholder="Ej: JUAN PEREZ" style="text-transform: uppercase;" @input="validarNombreProfe" required>
                             
                             <div class="row mb-2">
                                 <div class="col-12">
                                     <label>Max Horas Diarias</label>
-                                    <input 
-                                        type="number" 
-                                        v-model="formProfe.max_horas_dia" 
-                                        class="form-control" 
-                                        min="2" 
-                                        max="20"
-                                        required
-                                    >
-                                    <small class="text-muted d-block mt-1">
-                                        Max Semanal (Auto): <strong>[[ formProfe.max_horas_dia * 4 ]] hrs</strong>
-                                    </small>
+                                    <input type="number" v-model="formProfe.max_horas_dia" class="form-control" min="2" max="20" required>
+                                    <small class="text-muted d-block mt-1">Max Semanal (Auto): <strong>[[ formProfe.max_horas_dia * 4 ]] hrs</strong></small>
                                 </div>
                             </div>
 
@@ -119,7 +117,10 @@
                                 <td>[[ p.max_horas_semana ]]</td>
                                 <td>[[ p.max_horas_dia ]]</td>
                                 <td><span class="badge bg-info text-dark">[[ p.materias ]]</span></td>
-                                <td><button @click="borrarProfesor(p.id)" class="btn btn-sm btn-danger">🗑️</button></td>
+                                <td>
+                                    <button @click="editarNombreProfesor(p)" class="btn btn-sm btn-warning me-2">✏️</button>
+                                    <button @click="borrarProfesor(p.id)" class="btn btn-sm btn-danger">🗑️</button>
+                                </td>
                             </tr>
                         </tbody>
                     </table>
@@ -131,22 +132,16 @@
             <div class="row justify-content-center mt-4">
                 <div class="col-md-5">
                     <div class="card shadow border-success mb-4">
-                        <div class="card-header bg-success text-white">
-                            <h5 class="mb-0">📥 Guardar Copia de Seguridad</h5>
-                        </div>
+                        <div class="card-header bg-success text-white"><h5 class="mb-0">📥 Guardar Copia de Seguridad</h5></div>
                         <div class="card-body text-center">
                             <p>Descarga un archivo <strong>.json</strong> con todas las Materias y Profesores configurados.</p>
-                            <a href="/api/backup" target="_blank" class="btn btn-outline-success btn-lg w-100">
-                                Descargar Respaldo
-                            </a>
+                            <a href="/api/backup" target="_blank" class="btn btn-outline-success btn-lg w-100">Descargar Respaldo</a>
                         </div>
                     </div>
                 </div>
                 <div class="col-md-5">
                     <div class="card shadow border-warning">
-                        <div class="card-header bg-warning text-dark">
-                            <h5 class="mb-0">📤 Restaurar Datos</h5>
-                        </div>
+                        <div class="card-header bg-warning text-dark"><h5 class="mb-0">📤 Restaurar Datos</h5></div>
                         <div class="card-body">
                             <p class="small text-danger fw-bold">⚠️ ESTO BORRARÁ LOS DATOS ACTUALES</p>
                             <p>Sube un archivo .json previamente descargado.</p>
@@ -172,7 +167,6 @@
             return {
                 materias_list: [], profesores_list: [],
                 nuevaMateria: { nombre: '', nivel: 1, cantidad: 1 },
-                // Inicializamos en 6 horas diarias por defecto (24 semanales)
                 formProfe: { nombre: '', max_horas_dia: 6, materias_ids: [] }
             }
         },
@@ -202,16 +196,35 @@
             validarNombreProfe() { this.formProfe.nombre = this.formProfe.nombre.replace(/[^a-zA-ZñÑáéíóúÁÉÍÓÚ\s]/g, ''); },
             
             async guardarProfesor() {
-                // CAMBIO: Cálculo automático
+                // CAMBIO: Validación de máximo 2 niveles por materia
+                const nivelesPorMateria = {};
+                
+                this.formProfe.materias_ids.forEach(id => {
+                    const mat = this.materias_list.find(m => m.id === id);
+                    if (!mat) return;
+                    if (!nivelesPorMateria[mat.nombre]) {
+                        nivelesPorMateria[mat.nombre] = new Set();
+                    }
+                    nivelesPorMateria[mat.nombre].add(mat.nivel);
+                });
+
+                // Verificar si alguna materia tiene más de 2 niveles distintos
+                for (const [nombreMateria, niveles] of Object.entries(nivelesPorMateria)) {
+                    if (niveles.size > 2) {
+                        this.showError(`El profesor no puede impartir más de 2 niveles de ${nombreMateria}.`);
+                        return;
+                    }
+                }
+
+                // Cálculo automático
                 const hDia = this.formProfe.max_horas_dia;
-                const hSem = hDia * 4; // Lunes a Jueves
+                const hSem = hDia * 4; 
 
                 if (hDia < 2 || hDia > 20) { this.showError("Horas diarias deben ser entre 2 y 20."); return; }
                 if(this.formProfe.materias_ids.length===0) { this.showError("Selecciona materias"); return; }
                 
                 this.formProfe.nombre = this.formProfe.nombre.toUpperCase();
                 
-                // Preparamos el objeto para enviar (agregando la calculada)
                 const payload = {
                     ...this.formProfe,
                     max_horas_semana: hSem
@@ -224,9 +237,38 @@
                 }
                 else { this.showError("Error al guardar"); }
             },
+
+            // CAMBIO: Función para editar nombre
+            async editarNombreProfesor(profesor) {
+                const { value: nuevoNombre } = await Swal.fire({
+                    title: 'Editar Nombre',
+                    input: 'text',
+                    inputValue: profesor.nombre,
+                    showCancelButton: true,
+                    inputValidator: (value) => {
+                        if (!value) return 'El nombre no puede estar vacío';
+                    }
+                });
+
+                if (nuevoNombre) {
+                    const nombreMayus = nuevoNombre.toUpperCase();
+                    const res = await fetch('/api/profesores/' + profesor.id, {
+                        method: 'PUT',
+                        headers: {'Content-Type': 'application/json'},
+                        body: JSON.stringify({ nombre: nombreMayus })
+                    });
+
+                    if (res.ok) {
+                        await this.cargarTodo();
+                        this.showSuccess('Nombre actualizado');
+                    } else {
+                        this.showError('Error al actualizar');
+                    }
+                }
+            },
+
             async borrarProfesor(id) { if(await this.confirmDelete()) { await fetch('/api/profesores/'+id, {method:'DELETE'}); this.cargarTodo(); } },
             
-            // --- LÓGICA DE RESPALDO (MEJORADA) ---
             async subirRespaldo() {
                 const file = this.$refs.fileInput.files[0];
                 if (!file) return;
@@ -250,7 +292,7 @@
                         if (res.ok) {
                             Swal.fire('Restaurado', data.message, 'success');
                             this.cargarTodo();
-                            this.$refs.fileInput.value = ''; // Limpiar input
+                            this.$refs.fileInput.value = '';
                         } else {
                             this.showError(data.error);
                         }

@@ -13,6 +13,10 @@ def index():
 def config():
     return render_template('config.html')
 
+@bp.route('/reportes')
+def reportes():
+    return render_template('reportes.html')
+
 # --- API MATERIAS ---
 @bp.route('/api/materias', methods=['GET', 'POST', 'DELETE'])
 def manage_materias():
@@ -84,6 +88,17 @@ def create_profesor():
             return jsonify({'status': 'ok'})
         except Exception as e:
             return jsonify({'error': str(e)}), 400
+
+# CAMBIO SOLICITADO: Nueva ruta para editar nombre del profesor
+@bp.route('/api/profesores/<int:id>', methods=['PUT'])
+def update_profesor(id):
+    data = request.json
+    try:
+        query = Profesor.update(nombre=data['nombre']).where(Profesor.id == id)
+        query.execute()
+        return jsonify({'status': 'ok'})
+    except Exception as e:
+        return jsonify({'error': str(e)}), 400
 
 @bp.route('/api/profesores/<int:id>', methods=['DELETE'])
 def delete_profesor(id):
@@ -169,6 +184,51 @@ def get_horario():
         
     return jsonify(eventos)
 
+# --- API ESTADISTICAS ---
+@bp.route('/api/estadisticas', methods=['GET'])
+def get_estadisticas():
+    conteo_bloques = {}
+    asignaciones = Horario.select()
+    
+    for h in asignaciones:
+        p_id = h.profesor.id
+        if p_id not in conteo_bloques:
+            conteo_bloques[p_id] = 0
+        conteo_bloques[p_id] += 1
+
+    profesores = Profesor.select()
+    reporte = []
+    
+    for p in profesores:
+        bloques_asignados = conteo_bloques.get(p.id, 0)
+        horas_reales = bloques_asignados * 2 
+        
+        estado = "OK"
+        if horas_reales == 0:
+            estado = "SIN_CARGA"
+        elif horas_reales > p.max_horas_semana:
+            estado = "SOBRECARGA"
+        elif horas_reales < (p.max_horas_semana * 0.5): 
+            estado = "SUBUTILIZADO"
+
+        reporte.append({
+            'id': p.id,
+            'nombre': p.nombre,
+            'horas_asignadas': horas_reales,
+            'horas_maximas': p.max_horas_semana,
+            'estado': estado,
+            'porcentaje': round((horas_reales / p.max_horas_semana) * 100, 1) if p.max_horas_semana > 0 else 0
+        })
+
+    return jsonify({
+        'profesores': reporte,
+        'resumen': {
+            'total_profesores': len(profesores),
+            'total_clases_semanales': len(asignaciones),
+            'profesores_sin_carga': len([x for x in reporte if x['estado'] == 'SIN_CARGA'])
+        }
+    })
+
 # --- BACKUP ---
 @bp.route('/api/backup', methods=['GET'])
 def backup_data():
@@ -206,11 +266,6 @@ def restore_data():
         if data.get('system_signature') != 'GENERADOR_HORARIOS_V1':
             return jsonify({'error': 'Firma inválida. Este archivo no pertenece a este sistema.'}), 400
         
-        required_keys = ['materias', 'profesores']
-        if not all(key in data for key in required_keys):
-            return jsonify({'error': 'Estructura corrupta. Faltan datos clave.'}), 400
-
-        
         with db.atomic():
             Horario.delete().execute()
             ProfesorMateria.delete().execute()
@@ -218,15 +273,13 @@ def restore_data():
             Materia.delete().execute()
             Curso.delete().execute()
 
-            print(f"Restaurando {len(data['materias'])} materias...")
             for m in data['materias']:
                 Materia.create(
                     nombre=m['nombre'],
                     nivel=m['nivel'],
                     cantidad_grupos=m['cantidad_grupos']
                 )
-            
-            print(f"Restaurando {len(data['profesores'])} profesores...")
+
             for p in data['profesores']:
                 nuevo_profe = Profesor.create(
                     nombre=p['nombre'],
@@ -245,61 +298,3 @@ def restore_data():
         return jsonify({'error': 'El archivo no es un JSON válido'}), 400
     except Exception as e:
         return jsonify({'error': f'Error procesando datos: {str(e)}'}), 500
-
-# --- NUEVAS RUTAS PARA REPORTES ---
-@bp.route('/reportes')
-def reportes():
-    return render_template('reportes.html')
-
-@bp.route('/api/estadisticas', methods=['GET'])
-def get_estadisticas():
-    # 1. Calcular carga horaria real por profesor
-    # Cada entrada en Horario es un bloque de 2 horas (según tu lógica actual)
-    conteo_bloques = {}
-    
-    # Traemos todos los horarios
-    asignaciones = Horario.select()
-    
-    for h in asignaciones:
-        p_id = h.profesor.id
-        if p_id not in conteo_bloques:
-            conteo_bloques[p_id] = 0
-        conteo_bloques[p_id] += 1
-
-    # 2. Construir reporte comparativo
-    profesores = Profesor.select()
-    reporte = []
-    
-    for p in profesores:
-        bloques_asignados = conteo_bloques.get(p.id, 0)
-        horas_reales = bloques_asignados * 2 # Cada bloque vale 2 horas
-        
-        estado = "OK"
-        if horas_reales == 0:
-            estado = "SIN_CARGA"
-        elif horas_reales > p.max_horas_semana:
-            estado = "SOBRECARGA" # No debería pasar por el solver, pero por seguridad
-        elif horas_reales < (p.max_horas_semana * 0.5): # Menos del 50%
-            estado = "SUBUTILIZADO"
-
-        reporte.append({
-            'id': p.id,
-            'nombre': p.nombre,
-            'horas_asignadas': horas_reales,
-            'horas_maximas': p.max_horas_semana,
-            'estado': estado,
-            'porcentaje': round((horas_reales / p.max_horas_semana) * 100, 1) if p.max_horas_semana > 0 else 0
-        })
-
-    # 3. Datos adicionales del sistema
-    total_clases = len(asignaciones)
-    materias_sin_asignar = 0 # (Lógica futura si se requiere)
-
-    return jsonify({
-        'profesores': reporte,
-        'resumen': {
-            'total_profesores': len(profesores),
-            'total_clases_semanales': total_clases,
-            'profesores_sin_carga': len([x for x in reporte if x['estado'] == 'SIN_CARGA'])
-        }
-    })

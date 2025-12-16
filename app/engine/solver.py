@@ -42,7 +42,9 @@ def generar_horario_automatico():
     
     # Slots de 2 horas
     slots_matutinos = [7, 9, 11]
-    slots_vespertinos = [14, 16, 18]
+    # CAMBIO SOLICITADO: Horario vespertino de 1 PM (13:00) a 7 PM (19:00)
+    # Bloques inician a las: 13:00, 15:00 y 17:00 (terminando a las 19:00)
+    slots_vespertinos = [13, 15, 17]
 
     shifts = {}
     clases_a_programar = []
