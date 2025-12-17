@@ -1,6 +1,8 @@
 {% extends "base.html" %}
 
 {% block content %}
+<link rel="stylesheet" href="https://unpkg.com/tippy.js@6/animations/scale.css"/>
+
 <div id="app" style="height: calc(100vh - 100px); display: flex; flex-direction: column;">
     
     <div class="d-flex justify-content-between align-items-center mb-3">
@@ -101,9 +103,27 @@
         background-color: #6f42c1;
         color: white;
     }
+    
+    /* Estilo para el Tooltip personalizado */
+    .tippy-box[data-theme~='custom'] {
+        background-color: #343a40;
+        color: white;
+        font-size: 0.85rem;
+        border-radius: 6px;
+        text-align: left;
+    }
+    .tooltip-header {
+        border-bottom: 1px solid rgba(255,255,255,0.2);
+        padding-bottom: 4px;
+        margin-bottom: 4px;
+        font-weight: bold;
+        color: #ffc107;
+    }
 </style>
 
 <script src='https://cdn.jsdelivr.net/npm/fullcalendar@6.1.10/index.global.min.js'></script>
+<script src="https://unpkg.com/@popperjs/core@2"></script>
+<script src="https://unpkg.com/tippy.js@6"></script>
 
 <script>
     const { createApp } = Vue
@@ -115,12 +135,9 @@
                 loading: false,
                 sidebarOpen: false, 
                 calendar: null,
-                
-                allEvents: [],      // Todos los eventos crudos
-                materias_db: [],    // Info estática de BD
-                profesores_db: [],  // Info estática de BD
-
-                // Estado de Filtros
+                allEvents: [],      
+                materias_db: [],    
+                profesores_db: [],  
                 vistaModalidad: 'ALL',
                 filtros: {
                     materiaNombre: '',
@@ -131,7 +148,6 @@
             }
         },
         computed: {
-            // 1. Eventos filtrados SOLO por modalidad (Base para los dropdowns)
             eventosBaseModalidad() {
                 if (this.vistaModalidad === 'ALL') return this.allEvents;
                 return this.allEvents.filter(e => {
@@ -140,44 +156,28 @@
                     return true;
                 });
             },
-
-            // 2. Extraer Materias que existen en los eventos actuales
             materiasGeneralesDisponibles() {
-                // Obtener IDs de materias presentes en la vista actual
                 const idsPresentes = new Set(this.eventosBaseModalidad.map(e => e.extendedProps.materia_id));
-                // Filtrar la DB
                 const materiasActivas = this.materias_db.filter(m => idsPresentes.has(m.id));
-                // Extraer nombres únicos
                 return [...new Set(materiasActivas.map(m => m.nombre))].sort();
             },
-
-            // 3. Materias Específicas (Filtradas por Nombre General si está seleccionado)
             materiasEspecificasDisponibles() {
                 const idsPresentes = new Set(this.eventosBaseModalidad.map(e => e.extendedProps.materia_id));
                 let filtradas = this.materias_db.filter(m => idsPresentes.has(m.id));
-                
                 if (this.filtros.materiaNombre) {
                     filtradas = filtradas.filter(m => m.nombre === this.filtros.materiaNombre);
                 }
                 return filtradas.sort((a,b) => a.nivel - b.nivel);
             },
-
-            // 4. Profesores Disponibles (Filtrados por Materia si está seleccionada)
             profesoresDisponibles() {
-                // Si hay materia seleccionada, ver qué profes dan esa materia en los eventos visibles
                 let eventosCandidatos = this.eventosBaseModalidad;
-                
-                // Si hay filtro de materia nombre
                 if (this.filtros.materiaNombre) {
-                    // Obtener ids de esa materia
                     const idsMatName = this.materias_db.filter(m => m.nombre === this.filtros.materiaNombre).map(m => m.id);
                     eventosCandidatos = eventosCandidatos.filter(e => idsMatName.includes(e.extendedProps.materia_id));
                 }
-                // Si hay filtro de materia ID específico (gana al nombre)
                 if (this.filtros.materiaId) {
                     eventosCandidatos = eventosCandidatos.filter(e => e.extendedProps.materia_id === this.filtros.materiaId);
                 }
-
                 const idsProfes = new Set(eventosCandidatos.map(e => e.extendedProps.profesor_id));
                 return this.profesores_db.filter(p => idsProfes.has(p.id));
             }
@@ -194,10 +194,8 @@
             
             async cargarDatos() {
                 try {
-                    // Cargar catálogos
                     this.materias_db = await (await fetch('/api/materias')).json();
                     this.profesores_db = await (await fetch('/api/profesores')).json();
-                    // Cargar eventos
                     const res = await fetch('/api/horario');
                     this.allEvents = await res.json();
                     this.aplicarFiltros();
@@ -217,18 +215,13 @@
             },
 
             aplicarFiltros() {
-                // Filtro Final que va al Calendario
                 const filtrados = this.eventosBaseModalidad.filter(e => {
-                    // Materia Nombre
                     if (this.filtros.materiaNombre) {
                         const m = this.materias_db.find(x => x.id === e.extendedProps.materia_id);
                         if (!m || m.nombre !== this.filtros.materiaNombre) return false;
                     }
-                    // Materia ID
                     if (this.filtros.materiaId && e.extendedProps.materia_id !== this.filtros.materiaId) return false;
-                    // Profesor
                     if (this.filtros.profesor && e.extendedProps.profesor_id !== this.filtros.profesor) return false;
-
                     return true;
                 });
 
@@ -244,21 +237,67 @@
                 this.calendar = new FullCalendar.Calendar(calendarEl, {
                     initialView: 'timeGridWeek',
                     locale: 'es',
-                    firstDay: 1, // LUNES
+                    firstDay: 1, 
+                    
+                    // --- 1. BLOQUEO DE FECHAS ---
+                    initialDate: '2023-11-20',
+                    validRange: {
+                        start: '2023-11-20',
+                        end: '2023-11-27' 
+                    },
+                    
+                    headerToolbar: {
+                        left: '', 
+                        center: '', // Ocultar rango de fechas
+                        right: 'timeGridWeek,timeGridDay,listWeek' 
+                    },
+                    
+                    // --- 2. FORMATOS VISUALES (MODIFICADO) ---
+                    // Para vista TimeGrid (Columnas)
+                    dayHeaderFormat: { weekday: 'long' },
+                    
+                    // Para vista List (Lista)
+                    listDayFormat: { weekday: 'long' }, // Solo nombre del día a la izquierda
+                    listDaySideFormat: false,           // Ocultar fecha completa a la derecha
+                    
+                    // --- 3. LÍMITE DE EVENTOS ---
+                    dayMaxEvents: true, 
+                    
                     hiddenDays: [], 
                     slotMinTime: '07:00:00',
                     slotMaxTime: '22:00:00',
                     allDaySlot: false,
                     expandRows: true,
                     height: '100%',
-                    dayHeaderFormat: { weekday: 'long' }, // Solo nombre del día
-                    headerToolbar: {
-                        left: '',
-                        center: '', 
-                        right: 'timeGridWeek,timeGridDay'
-                    },
-                    initialDate: '2023-11-20',
-                    eventColor: '#3788d8'
+                    eventColor: '#3788d8',
+
+                    // --- 4. TOOLTIPS ---
+                    eventDidMount: function(info) {
+                        const ev = info.event;
+                        const props = ev.extendedProps;
+                        
+                        const lineas = ev.title.split('\n');
+                        const lineaMateria = lineas[0] || 'Clase';
+                        const lineaProfe = lineas[1] || 'Sin profesor';
+
+                        const startTime = ev.start.toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'});
+                        const endTime = ev.end.toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'});
+
+                        const tooltipContent = `
+                            <div class="tooltip-header">${lineaMateria}</div>
+                            <div><strong>👨‍🏫 Profe:</strong> ${lineaProfe}</div>
+                            <div><strong>⏰ Hora:</strong> ${startTime} - ${endTime}</div>
+                            <div class="mt-1"><span class="badge bg-light text-dark">${props.modalidad}</span></div>
+                        `;
+
+                        tippy(info.el, {
+                            content: tooltipContent,
+                            allowHTML: true,
+                            theme: 'custom',
+                            animation: 'scale',
+                            placement: 'top',
+                        });
+                    }
                 });
                 this.calendar.render();
             },
@@ -276,7 +315,7 @@
                     this.loading = true;
                     try {
                         await fetch('/api/generar', {method: 'POST'});
-                        await this.cargarDatos(); // Recargar todo
+                        await this.cargarDatos(); 
                         Swal.fire('¡Éxito!', 'Horario generado', 'success');
                     } catch (e) {
                         Swal.fire('Error', 'Fallo de conexión', 'error');
