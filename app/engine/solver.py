@@ -62,7 +62,6 @@ def generar_horario_automatico():
     ALL_SLOTS_LJ = sorted(SLOTS_LJ_MAT + SLOTS_LJ_VESP + SLOTS_LJ_NOCHE)
 
     # BLOQUES FDS (4 horas Sábado + 4 horas Domingo = 8 horas)
-    # Solo permitimos inicios a las 7:00 (para acabar a las 11:00)
     SLOT_FDS_INICIO = [7] 
 
     # Variables principales: shifts[(clase_idx, p_id, slot, tipo_dia)]
@@ -154,7 +153,6 @@ def generar_horario_automatico():
                     v_s = shifts.get((c_idx, p_id, s, 1))
                     v_d = shifts.get((c_idx, p_id, s, 2))
                     
-                    # CORRECCIÓN: Usar 'is not None' en lugar de evaluación booleana directa
                     if v_s is not None and v_d is not None:
                         model.Add(v_s == v_d)
 
@@ -189,29 +187,68 @@ def generar_horario_automatico():
                 duracion_bloque = 4 # Son bloques de 4 horas
                 dias_reales = 1
 
+            # Primero creamos variables de trabajo en este slot (usado para carga y consecutivos)
             is_working = {}
-            
             for s in slots_del_dia:
                 vars_en_slot = vars_by_p_d_s.get((p.id, tipo_dia, s), [])
                 trabaja_s = model.NewBoolVar(f'work_p{p.id}_d{tipo_dia}_s{s}')
                 model.Add(sum(vars_en_slot) == trabaja_s)
                 is_working[s] = trabaja_s
                 
-                # Carga Semanal: (1 si trabaja) * duracion * dias que se repite
+                # Carga Semanal
                 vars_total_semana.append(trabaja_s * duracion_bloque * dias_reales)
 
-                # --- GAP DE MODALIDAD (Solo aplica en L-J porque en FDS solo hay Online) ---
-                if tipo_dia == 0:
-                     # Aquí podría ir la lógica de Gap si decides implementarla de nuevo
-                     pass 
+            # --- VALIDACIÓN DE GAP DE MODALIDAD (REGLA CRÍTICA) Y CONSECUTIVOS ---
+            
+            # Recolectar variables por slot y modalidad para este profesor/dia
+            # vars_reg_in_slot[s] -> lista de vars Regular
+            # vars_onl_in_slot[s] -> lista de vars Online
+            
+            vars_reg_in_slot = {s: [] for s in slots_del_dia}
+            vars_onl_in_slot = {s: [] for s in slots_del_dia}
+            
+            # Iteración optimizada para separar variables
+            for k, var in shifts.items():
+                # k = (c_idx, p_id, slot, tipo_dia)
+                if k[1] == p.id and k[3] == tipo_dia:
+                    s = k[2]
+                    if s in slots_del_dia:
+                        mod = clases_a_programar[k[0]]['modalidad']
+                        if mod == 'REGULAR':
+                            vars_reg_in_slot[s].append(var)
+                        else: # ONLINE_LJ o ONLINE_FDS
+                            vars_onl_in_slot[s].append(var)
+            
+            is_reg_map = {}
+            is_onl_map = {}
+            
+            for s in slots_del_dia:
+                b_reg = model.NewBoolVar(f'breg_p{p.id}_d{tipo_dia}_s{s}')
+                b_onl = model.NewBoolVar(f'bonl_p{p.id}_d{tipo_dia}_s{s}')
+                
+                model.Add(sum(vars_reg_in_slot[s]) == b_reg)
+                model.Add(sum(vars_onl_in_slot[s]) == b_onl)
+                
+                is_reg_map[s] = b_reg
+                is_onl_map[s] = b_onl
 
-            # CONSECUTIVOS (Solo aplica si hay más de 1 slot posible, en FDS solo hay 1 slot de 7-11)
+            # APLICAR RESTRICCIONES DE PARES (GAP) Y OBJETIVO (CONSECUTIVOS)
             if len(slots_del_dia) > 1:
                 for i in range(len(slots_del_dia) - 1):
                     s1 = slots_del_dia[i]
                     s2 = slots_del_dia[i+1]
-                    if s2 - s1 == 2: # Solo si son bloques de 2h seguidos
-                        b_consec = model.NewBoolVar(f'cons_p{p.id}_{s1}_{s2}')
+                    
+                    # Solo si son adyacentes temporalmente (gap 0)
+                    if s2 - s1 == 2:
+                        # 1. GAP DE MODALIDAD (Solo tiene sentido en L-J donde se mezclan)
+                        # Prohibido: (Reg en s1 Y Onl en s2) O (Onl en s1 Y Reg en s2)
+                        if tipo_dia == 0:
+                            model.Add(is_reg_map[s1] + is_onl_map[s2] <= 1)
+                            model.Add(is_onl_map[s1] + is_reg_map[s2] <= 1)
+                        
+                        # 2. OBJETIVO: CONSECUTIVOS
+                        # Premiar si trabaja en s1 Y trabaja en s2
+                        b_consec = model.NewBoolVar(f'cons_p{p.id}_d{tipo_dia}_{s1}_{s2}')
                         model.AddMultiplicationEquality(b_consec, [is_working[s1], is_working[s2]])
                         obj_consecutivos.append(b_consec)
 
@@ -220,7 +257,6 @@ def generar_horario_automatico():
             model.Add(sum(vars_total_semana) <= p.max_horas_semana)
             
             is_active = model.NewBoolVar(f'active_p{p.id}')
-            # Maximizamos que el profesor esté activo si tiene carga > 0
             model.Add(sum(vars_total_semana) >= is_active)
             obj_profesores_activos.append(is_active)
 
