@@ -23,7 +23,7 @@
                 <div class="col-md-4">
                     <div class="card p-3 shadow-sm border-primary mb-3">
                         <h5 class="text-primary">Planificar Demanda</h5>
-                        <p class="small text-muted">Define cuántos cursos presenciales y online necesitas.</p>
+                        <p class="small text-muted">Define la cantidad de cursos por modalidad.</p>
                         <form @submit.prevent="crearMateria">
                             <div class="mb-2">
                                 <label>Asignatura</label>
@@ -37,18 +37,25 @@
                                 </select>
                             </div>
                             
+                            <hr class="my-2">
+                            
+                            <div class="mb-2">
+                                <label class="small fw-bold text-dark">🏫 Presencial (L-J)</label>
+                                <input type="number" v-model="nuevaMateria.cantidad_regular" class="form-control" min="0" required>
+                            </div>
+
                             <div class="row mb-2">
                                 <div class="col-6">
-                                    <label class="small fw-bold">Regulares</label>
-                                    <input type="number" v-model="nuevaMateria.cantidad_regular" class="form-control" min="0" required>
+                                    <label class="small fw-bold text-success">💻 Online (L-J)</label>
+                                    <input type="number" v-model="nuevaMateria.cantidad_online_lj" class="form-control" min="0" required>
                                 </div>
                                 <div class="col-6">
-                                    <label class="small fw-bold text-success">Online</label>
-                                    <input type="number" v-model="nuevaMateria.cantidad_online" class="form-control" min="0" required>
+                                    <label class="small fw-bold text-primary">📅 Online (S-D)</label>
+                                    <input type="number" v-model="nuevaMateria.cantidad_online_fds" class="form-control" min="0" required>
                                 </div>
                             </div>
 
-                            <button class="btn btn-primary w-100">Guardar</button>
+                            <button class="btn btn-primary w-100 mt-2">Guardar</button>
                         </form>
                     </div>
 
@@ -68,13 +75,14 @@
                 </div>
 
                 <div class="col-md-8">
-                    <table class="table table-bordered table-hover">
+                    <table class="table table-bordered table-hover align-middle">
                         <thead class="table-light">
                             <tr>
                                 <th>Materia</th>
                                 <th>Nivel</th>
-                                <th>Regulares</th>
-                                <th>Online</th>
+                                <th class="text-center" style="width: 15%">Presencial<br><small>(L-J)</small></th>
+                                <th class="text-center" style="width: 15%">Online<br><small>(L-J)</small></th>
+                                <th class="text-center" style="width: 15%">Online<br><small>(S-D)</small></th>
                                 <th>Acción</th>
                             </tr>
                         </thead>
@@ -82,8 +90,11 @@
                             <tr v-for="m in materias_list">
                                 <td class="fw-bold">[[ m.nombre ]]</td>
                                 <td><span class="badge bg-secondary">Nivel [[ m.nivel ]]</span></td>
-                                <td>[[ m.cantidad_regular ]]</td>
-                                <td class="text-success fw-bold">[[ m.cantidad_online ]]</td>
+                                
+                                <td class="text-center fw-bold">[[ m.cantidad_regular ]]</td>
+                                <td class="text-center text-success fw-bold">[[ m.cantidad_online_lj ]]</td>
+                                <td class="text-center text-primary fw-bold">[[ m.cantidad_online_fds ]]</td>
+                                
                                 <td class="text-end"><button @click="borrarMateria(m.id)" class="btn btn-sm btn-danger">🗑️</button></td>
                             </tr>
                         </tbody>
@@ -180,8 +191,14 @@
         data() {
             return {
                 materias_list: [], profesores_list: [],
-                // CAMBIO: Inicialización de los dos campos de cantidad
-                nuevaMateria: { nombre: '', nivel: 1, cantidad_regular: 1, cantidad_online: 0 },
+                // CAMBIO: Inicialización correcta con los 3 campos de demanda
+                nuevaMateria: { 
+                    nombre: '', 
+                    nivel: 1, 
+                    cantidad_regular: 0, 
+                    cantidad_online_lj: 0, 
+                    cantidad_online_fds: 0 
+                },
                 formProfe: { nombre: '', max_horas_dia: 6, materias_ids: [] }
             }
         },
@@ -202,16 +219,22 @@
             
             async crearMateria() {
                 if(!this.nuevaMateria.nombre) return;
-                // Validación de que al menos uno tenga cantidad
-                if(this.nuevaMateria.cantidad_regular == 0 && this.nuevaMateria.cantidad_online == 0) {
-                    this.showError("Debes agregar al menos 1 curso (Regular u Online)");
+                
+                // CAMBIO: Validación para los 3 campos nuevos
+                const { cantidad_regular, cantidad_online_lj, cantidad_online_fds } = this.nuevaMateria;
+                if(cantidad_regular == 0 && cantidad_online_lj == 0 && cantidad_online_fds == 0) {
+                    this.showError("Debes agregar al menos 1 curso en alguna modalidad.");
                     return;
                 }
 
                 this.nuevaMateria.nombre = this.nuevaMateria.nombre.toUpperCase();
                 const res = await fetch('/api/materias', { method: 'POST', headers: {'Content-Type': 'application/json'}, body: JSON.stringify(this.nuevaMateria) });
                 if (res.ok) { 
-                    this.nuevaMateria = { nombre: '', nivel: 1, cantidad_regular: 1, cantidad_online: 0 }; 
+                    // Resetear formulario
+                    this.nuevaMateria = { 
+                        nombre: '', nivel: 1, 
+                        cantidad_regular: 0, cantidad_online_lj: 0, cantidad_online_fds: 0 
+                    }; 
                     this.cargarTodo(); 
                     this.showSuccess('Materia guardada'); 
                 } else { 

@@ -62,9 +62,7 @@ def generar_horario_automatico():
     ALL_SLOTS_LJ = sorted(SLOTS_LJ_MAT + SLOTS_LJ_VESP + SLOTS_LJ_NOCHE)
 
     # BLOQUES FDS (4 horas Sábado + 4 horas Domingo = 8 horas)
-    # Solo permitimos inicios a las 7:00 (para acabar a las 11:00) o quizás 7 y 8?
-    # El usuario dijo "Bloque permitido 07:00 a 11:00". Eso es un solo bloque de 4 horas.
-    # Por tanto, el único slot de inicio posible es las 7:00.
+    # Solo permitimos inicios a las 7:00 (para acabar a las 11:00)
     SLOT_FDS_INICIO = [7] 
 
     # Variables principales: shifts[(clase_idx, p_id, slot, tipo_dia)]
@@ -156,7 +154,8 @@ def generar_horario_automatico():
                     v_s = shifts.get((c_idx, p_id, s, 1))
                     v_d = shifts.get((c_idx, p_id, s, 2))
                     
-                    if v_s and v_d:
+                    # CORRECCIÓN: Usar 'is not None' en lugar de evaluación booleana directa
+                    if v_s is not None and v_d is not None:
                         model.Add(v_s == v_d)
 
     # 2. Conflictos de Profesor 
@@ -203,10 +202,7 @@ def generar_horario_automatico():
 
                 # --- GAP DE MODALIDAD (Solo aplica en L-J porque en FDS solo hay Online) ---
                 if tipo_dia == 0:
-                     # Lógica de Gap para L-J (Regular vs Online LJ)
-                     # Recuperamos vars y chequeamos adyacencia
-                     # (Simplificado aquí para brevedad, se mantiene igual que en tu versión anterior
-                     #  pero adaptado a las nuevas modalidades 'ONLINE_LJ')
+                     # Aquí podría ir la lógica de Gap si decides implementarla de nuevo
                      pass 
 
             # CONSECUTIVOS (Solo aplica si hay más de 1 slot posible, en FDS solo hay 1 slot de 7-11)
@@ -224,6 +220,7 @@ def generar_horario_automatico():
             model.Add(sum(vars_total_semana) <= p.max_horas_semana)
             
             is_active = model.NewBoolVar(f'active_p{p.id}')
+            # Maximizamos que el profesor esté activo si tiene carga > 0
             model.Add(sum(vars_total_semana) >= is_active)
             obj_profesores_activos.append(is_active)
 
