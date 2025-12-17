@@ -1,3 +1,5 @@
+# app/models.py
+
 from peewee import Model, CharField, IntegerField, ForeignKeyField
 from app.database import db
 
@@ -9,7 +11,6 @@ class BaseModel(Model):
 class Materia(BaseModel):
     nombre = CharField() 
     nivel = IntegerField() 
-    # CAMBIO: Separación de demanda por modalidad
     cantidad_regular = IntegerField(default=0) # Presencial
     cantidad_online = IntegerField(default=0)  # En Línea
     
@@ -17,17 +18,16 @@ class Materia(BaseModel):
         indexes = ((('nombre', 'nivel'), True),)
 
 class Curso(BaseModel):
-    nombre = CharField() # Ej: "A", "B" o "OL1"
+    nombre = CharField() 
     nivel = IntegerField() 
     turno = CharField() 
-    # CAMBIO: Campo para distinguir modalidad
     modalidad = CharField() # 'REGULAR' o 'ONLINE'
 
 # --- 2. DOCENTES ---
 class Profesor(BaseModel):
     nombre = CharField(unique=True)
-    max_horas_semana = IntegerField(default=20)
-    max_horas_dia = IntegerField(default=6)
+    max_horas_semana = IntegerField(default=32)
+    max_horas_dia = IntegerField(default=8)
 
 class ProfesorMateria(BaseModel):
     profesor = ForeignKeyField(Profesor, backref='competencias')
