@@ -12,7 +12,7 @@
                 <label class="btn btn-outline-primary" for="viewAll">Todos</label>
 
                 <input type="radio" class="btn-check" name="modview" id="viewReg" value="REGULAR" v-model="vistaModalidad" @change="aplicarFiltros">
-                <label class="btn btn-outline-success" for="viewReg">🏫 Regular</label>
+                <label class="btn btn-outline-success" for="viewReg">🏫 Presencial</label>
 
                 <input type="radio" class="btn-check" name="modview" id="viewOnl" value="ONLINE" v-model="vistaModalidad" @change="aplicarFiltros">
                 <label class="btn btn-outline-purple" for="viewOnl">💻 Online</label>
@@ -42,8 +42,16 @@
             <h5 class="mb-3 fw-bold text-secondary">🔍 Filtros Avanzados</h5>
             
             <div class="mb-3">
-                <label class="form-label small fw-bold">Por Materia</label>
-                <select v-model="filtros.materia" class="form-select shadow-sm" @change="aplicarFiltros">
+                <label class="form-label small fw-bold">Materia (General)</label>
+                <select v-model="filtros.materiaNombre" class="form-select shadow-sm" @change="aplicarFiltros">
+                    <option value="">-- Todas --</option>
+                    <option v-for="nombre in materias_unicas" :value="nombre">[[ nombre ]]</option>
+                </select>
+            </div>
+
+            <div class="mb-3">
+                <label class="form-label small fw-bold">Por Materia (Específica)</label>
+                <select v-model="filtros.materiaId" class="form-select shadow-sm" @change="aplicarFiltros">
                     <option value="">-- Todas --</option>
                     <option v-for="m in materias_list" :value="m.id">[[ m.nombre ]] (Niv. [[ m.nivel ]])</option>
                 </select>
@@ -116,10 +124,17 @@
                 // Filtros
                 vistaModalidad: 'ALL', // ALL, REGULAR, ONLINE
                 filtros: {
-                    materia: '',
+                    materiaNombre: '',
+                    materiaId: '',
                     profesor: ''
                 },
                 eventosVisibles: 0
+            }
+        },
+        computed: {
+            materias_unicas() {
+                const nombres = this.materias_list.map(m => m.nombre);
+                return [...new Set(nombres)].sort();
             }
         },
         mounted() {
@@ -153,16 +168,26 @@
                     // 1. Filtro de Modalidad (Vista)
                     let passModalidad = true;
                     if (this.vistaModalidad === 'REGULAR') {
+                        // Solo si es estrictamente REGULAR
                         passModalidad = (e.extendedProps.modalidad === 'REGULAR');
                     } else if (this.vistaModalidad === 'ONLINE') {
-                        passModalidad = (e.extendedProps.modalidad === 'ONLINE');
+                        // Si contiene ONLINE (ya sea LJ o FDS)
+                        passModalidad = e.extendedProps.modalidad.includes('ONLINE');
                     }
 
-                    // 2. Filtros Específicos
-                    const passMateria = !this.filtros.materia || e.extendedProps.materia_id === this.filtros.materia;
+                    // 2. Filtro Materia General (Nombre Texto)
+                    let passMatName = true;
+                    if (this.filtros.materiaNombre) {
+                        // Buscamos el nombre en la lista usando el ID del evento
+                        const matObj = this.materias_list.find(m => m.id === e.extendedProps.materia_id);
+                        if (matObj && matObj.nombre !== this.filtros.materiaNombre) passMatName = false;
+                    }
+
+                    // 3. Filtros Específicos
+                    const passMateria = !this.filtros.materiaId || e.extendedProps.materia_id === this.filtros.materiaId;
                     const passProfe = !this.filtros.profesor || e.extendedProps.profesor_id === this.filtros.profesor;
                     
-                    return passModalidad && passMateria && passProfe;
+                    return passModalidad && passMatName && passMateria && passProfe;
                 });
 
                 this.eventosVisibles = filtrados.length;
@@ -174,7 +199,8 @@
             },
 
             limpiarFiltros() {
-                this.filtros.materia = '';
+                this.filtros.materiaNombre = '';
+                this.filtros.materiaId = '';
                 this.filtros.profesor = '';
                 this.vistaModalidad = 'ALL';
                 this.aplicarFiltros();
@@ -185,14 +211,14 @@
                 this.calendar = new FullCalendar.Calendar(calendarEl, {
                     initialView: 'timeGridWeek',
                     locale: 'es',
-                    // CAMBIO: Se muestran todos los días, ya que Online usa FDS
+                    firstDay: 1, // CAMBIO: Iniciar en Lunes (1) para que el Domingo (día 6 de la api) sea visible al final
                     hiddenDays: [], 
                     slotMinTime: '07:00:00',
-                    slotMaxTime: '22:00:00', // Hasta las 10 PM para ver bien el bloque de las 21:00
+                    slotMaxTime: '22:00:00', 
                     allDaySlot: false,
                     expandRows: true,
                     height: '100%',
-                    dayHeaderFormat: { weekday: 'short', day: 'numeric' }, // Ej: Lun 20
+                    dayHeaderFormat: { weekday: 'long' }, // CAMBIO: Mostrar solo nombre del día (Lunes, Martes...)
                     headerToolbar: {
                         left: '',
                         center: '', 

@@ -23,15 +23,18 @@ def generar_horario_automatico():
             # 2. Crear Cursos ONLINE L-J
             cant_online_lj = min(m.cantidad_online_lj, 10)
             for i in range(cant_online_lj):
-                nombre_curso = f"OL-LJ{i+1}"
+                # CAMBIO: Usar letras A, B, C... (revisar que no choquen si se desea unicidad global o por modalidad)
+                # El requerimiento es que se muestren como A B C. 
+                # Usaremos la misma lista de letras. Visualmente se distinguen por el tag [ON].
+                letra = letras[i] 
                 turno = 'Matutino' if i % 2 == 0 else 'Nocturno'
-                Curso.create(nombre=nombre_curso, nivel=m.nivel, turno=turno, modalidad='ONLINE_LJ')
+                Curso.create(nombre=letra, nivel=m.nivel, turno=turno, modalidad='ONLINE_LJ')
 
             # 3. Crear Cursos ONLINE Fin de Semana
             cant_online_fds = min(m.cantidad_online_fds, 5)
             for i in range(cant_online_fds):
-                nombre_curso = f"OL-FDS{i+1}"
-                Curso.create(nombre=nombre_curso, nivel=m.nivel, turno='FDS', modalidad='ONLINE_FDS')
+                letra = letras[i]
+                Curso.create(nombre=letra, nivel=m.nivel, turno='FDS', modalidad='ONLINE_FDS')
 
     # --- CARGA DE DATOS ---
     profesores = list(Profesor.select())
@@ -148,10 +151,10 @@ def generar_horario_automatico():
     obj_profesores_activos = []
     obj_prioridad_presencial = []
     
-    # Listas de preferencia Online por Niveles
+    # Listas de preferencia Online
     obj_preferencia_online_high = [] # Peso 100
     obj_preferencia_online_med = []  # Peso 50
-    obj_preferencia_online_low = []  # Peso 45 (NUEVO)
+    obj_preferencia_online_low = []  # Peso 45
 
     for c_idx, clase in enumerate(clases_a_programar):
         # A) PRIORIDAD PRESENCIAL
@@ -174,13 +177,13 @@ def generar_horario_automatico():
                     if v7 is not None: obj_preferencia_online_high.append(v7)
                     if v9 is not None: obj_preferencia_online_high.append(v9)
                     
-                    # Tier 2: 11 y 13 (Fallback aceptable) -> 50 pts
+                    # Tier 2: 11 y 13 -> 50 pts
                     v11 = shifts.get((c_idx, p_id, 11, 0))
                     v13 = shifts.get((c_idx, p_id, 13, 0))
                     if v11 is not None: obj_preferencia_online_med.append(v11)
                     if v13 is not None: obj_preferencia_online_med.append(v13)
                     
-                    # Tier 3: 19 (Noche como última opción decente) -> 45 pts
+                    # Tier 3: 19 -> 45 pts
                     v19 = shifts.get((c_idx, p_id, 19, 0))
                     if v19 is not None: obj_preferencia_online_low.append(v19)
                     
@@ -280,6 +283,11 @@ def generar_horario_automatico():
 
     if status == cp_model.OPTIMAL or status == cp_model.FEASIBLE:
         print(f"¡Solución encontrada! Objetivo: {solver.ObjectiveValue()}")
+        
+        # --- TABLA EN CONSOLA ---
+        print("-" * 75)
+        print(f"{'DÍA':<15} | {'HORA':<12} | {'ASIGNATURA':<25} | {'PROFESOR':<20}")
+        print("-" * 75)
 
         count = 0
         with db.atomic():
@@ -290,11 +298,13 @@ def generar_horario_automatico():
                     
                     # Log en consola
                     dia_str = "Lun-Jue" if tipo_dia == 0 else ("Sábado " if tipo_dia == 1 else "Domingo")
-                    materia_str = f"{datos['materia'].nombre} ({datos['curso'].nombre})"
-                    modalidad_str = " [REG]" if datos['modalidad'] == 'REGULAR' else " [ONL]"
+                    
+                    # Formato Log: [ON]Materia si es online
+                    tag = "[ON]" if datos['modalidad'] != 'REGULAR' else ""
+                    materia_str = f"{tag}{datos['materia'].nombre} - Nivel {datos['materia'].nivel} ({datos['curso'].nombre})"
                     profe_nombre = profesores_map.get(p_id, f"ID {p_id}")
                     
-                    print(f"{dia_str:<15} | {slot_inicio:02d}:00-{slot_inicio+2 if tipo_dia==0 else slot_inicio+4:02d}:00 | {materia_str + modalidad_str:<25} | {profe_nombre:<20}")
+                    print(f"{dia_str:<15} | {slot_inicio:02d}:00-{slot_inicio+2 if tipo_dia==0 else slot_inicio+4:02d}:00 | {materia_str:<35} | {profe_nombre:<20}")
 
                     dias_a_grabar = []
                     duracion = 2
