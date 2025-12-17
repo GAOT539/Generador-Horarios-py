@@ -8,13 +8,13 @@
             <h2 class="text-primary fw-bold m-0 d-inline-block me-3">📅 Calendario Académico</h2>
             
             <div class="btn-group" role="group">
-                <input type="radio" class="btn-check" name="modview" id="viewAll" value="ALL" v-model="vistaModalidad" @change="aplicarFiltros" checked>
+                <input type="radio" class="btn-check" name="modview" id="viewAll" value="ALL" v-model="vistaModalidad" @change="limpiarFiltrosSecundarios" checked>
                 <label class="btn btn-outline-primary" for="viewAll">Todos</label>
 
-                <input type="radio" class="btn-check" name="modview" id="viewReg" value="REGULAR" v-model="vistaModalidad" @change="aplicarFiltros">
+                <input type="radio" class="btn-check" name="modview" id="viewReg" value="REGULAR" v-model="vistaModalidad" @change="limpiarFiltrosSecundarios">
                 <label class="btn btn-outline-success" for="viewReg">🏫 Presencial</label>
 
-                <input type="radio" class="btn-check" name="modview" id="viewOnl" value="ONLINE" v-model="vistaModalidad" @change="aplicarFiltros">
+                <input type="radio" class="btn-check" name="modview" id="viewOnl" value="ONLINE" v-model="vistaModalidad" @change="limpiarFiltrosSecundarios">
                 <label class="btn btn-outline-purple" for="viewOnl">💻 Online</label>
             </div>
         </div>
@@ -39,36 +39,36 @@
         </div>
 
         <div class="sidebar-filtros bg-light border-start p-3" :class="{ 'open': sidebarOpen }">
-            <h5 class="mb-3 fw-bold text-secondary">🔍 Filtros Avanzados</h5>
+            <h5 class="mb-3 fw-bold text-secondary">🔍 Filtros Dinámicos</h5>
             
             <div class="mb-3">
                 <label class="form-label small fw-bold">Materia (General)</label>
-                <select v-model="filtros.materiaNombre" class="form-select shadow-sm" @change="aplicarFiltros">
+                <select v-model="filtros.materiaNombre" class="form-select shadow-sm" @change="filtros.materiaId = ''; aplicarFiltros()">
                     <option value="">-- Todas --</option>
-                    <option v-for="nombre in materias_unicas" :value="nombre">[[ nombre ]]</option>
+                    <option v-for="nombre in materiasGeneralesDisponibles" :value="nombre">[[ nombre ]]</option>
                 </select>
             </div>
 
             <div class="mb-3">
-                <label class="form-label small fw-bold">Por Materia (Específica)</label>
+                <label class="form-label small fw-bold">Nivel / Curso</label>
                 <select v-model="filtros.materiaId" class="form-select shadow-sm" @change="aplicarFiltros">
-                    <option value="">-- Todas --</option>
-                    <option v-for="m in materias_list" :value="m.id">[[ m.nombre ]] (Niv. [[ m.nivel ]])</option>
+                    <option value="">-- Todos --</option>
+                    <option v-for="m in materiasEspecificasDisponibles" :value="m.id">[[ m.nombre ]] - Nivel [[ m.nivel ]]</option>
                 </select>
             </div>
 
             <div class="mb-3">
-                <label class="form-label small fw-bold">Por Profesor</label>
+                <label class="form-label small fw-bold">Profesor</label>
                 <select v-model="filtros.profesor" class="form-select shadow-sm" @change="aplicarFiltros">
                     <option value="">-- Todos --</option>
-                    <option v-for="p in profesores_list" :value="p.id">[[ p.nombre ]]</option>
+                    <option v-for="p in profesoresDisponibles" :value="p.id">[[ p.nombre ]]</option>
                 </select>
             </div>
 
             <hr>
 
             <div class="d-grid">
-                <button class="btn btn-sm btn-outline-dark" @click="limpiarFiltros">
+                <button class="btn btn-sm btn-outline-dark" @click="limpiarTodo">
                     Limpiar Filtros 🗑️
                 </button>
             </div>
@@ -87,13 +87,12 @@
         width: 300px;
         background-color: #f8f9fa;
         transition: margin-right 0.3s ease-in-out;
-        margin-right: -300px; /* Oculto por defecto */
+        margin-right: -300px;
         min-width: 300px;
     }
     .sidebar-filtros.open {
-        margin-right: 0; /* Visible */
+        margin-right: 0;
     }
-    /* Estilo botón Online */
     .btn-outline-purple {
         color: #6f42c1;
         border-color: #6f42c1;
@@ -117,12 +116,12 @@
                 sidebarOpen: false, 
                 calendar: null,
                 
-                allEvents: [],
-                materias_list: [],
-                profesores_list: [],
+                allEvents: [],      // Todos los eventos crudos
+                materias_db: [],    // Info estática de BD
+                profesores_db: [],  // Info estática de BD
 
-                // Filtros
-                vistaModalidad: 'ALL', // ALL, REGULAR, ONLINE
+                // Estado de Filtros
+                vistaModalidad: 'ALL',
                 filtros: {
                     materiaNombre: '',
                     materiaId: '',
@@ -132,78 +131,112 @@
             }
         },
         computed: {
-            materias_unicas() {
-                const nombres = this.materias_list.map(m => m.nombre);
-                return [...new Set(nombres)].sort();
+            // 1. Eventos filtrados SOLO por modalidad (Base para los dropdowns)
+            eventosBaseModalidad() {
+                if (this.vistaModalidad === 'ALL') return this.allEvents;
+                return this.allEvents.filter(e => {
+                    if (this.vistaModalidad === 'REGULAR') return e.extendedProps.modalidad === 'REGULAR';
+                    if (this.vistaModalidad === 'ONLINE') return e.extendedProps.modalidad.includes('ONLINE');
+                    return true;
+                });
+            },
+
+            // 2. Extraer Materias que existen en los eventos actuales
+            materiasGeneralesDisponibles() {
+                // Obtener IDs de materias presentes en la vista actual
+                const idsPresentes = new Set(this.eventosBaseModalidad.map(e => e.extendedProps.materia_id));
+                // Filtrar la DB
+                const materiasActivas = this.materias_db.filter(m => idsPresentes.has(m.id));
+                // Extraer nombres únicos
+                return [...new Set(materiasActivas.map(m => m.nombre))].sort();
+            },
+
+            // 3. Materias Específicas (Filtradas por Nombre General si está seleccionado)
+            materiasEspecificasDisponibles() {
+                const idsPresentes = new Set(this.eventosBaseModalidad.map(e => e.extendedProps.materia_id));
+                let filtradas = this.materias_db.filter(m => idsPresentes.has(m.id));
+                
+                if (this.filtros.materiaNombre) {
+                    filtradas = filtradas.filter(m => m.nombre === this.filtros.materiaNombre);
+                }
+                return filtradas.sort((a,b) => a.nivel - b.nivel);
+            },
+
+            // 4. Profesores Disponibles (Filtrados por Materia si está seleccionada)
+            profesoresDisponibles() {
+                // Si hay materia seleccionada, ver qué profes dan esa materia en los eventos visibles
+                let eventosCandidatos = this.eventosBaseModalidad;
+                
+                // Si hay filtro de materia nombre
+                if (this.filtros.materiaNombre) {
+                    // Obtener ids de esa materia
+                    const idsMatName = this.materias_db.filter(m => m.nombre === this.filtros.materiaNombre).map(m => m.id);
+                    eventosCandidatos = eventosCandidatos.filter(e => idsMatName.includes(e.extendedProps.materia_id));
+                }
+                // Si hay filtro de materia ID específico (gana al nombre)
+                if (this.filtros.materiaId) {
+                    eventosCandidatos = eventosCandidatos.filter(e => e.extendedProps.materia_id === this.filtros.materiaId);
+                }
+
+                const idsProfes = new Set(eventosCandidatos.map(e => e.extendedProps.profesor_id));
+                return this.profesores_db.filter(p => idsProfes.has(p.id));
             }
         },
         mounted() {
             this.iniciarCalendario();
-            this.cargarDatosFiltros();
+            this.cargarDatos();
         },
         methods: {
             toggleSidebar() {
                 this.sidebarOpen = !this.sidebarOpen;
                 setTimeout(() => { this.calendar.updateSize(); }, 310);
             },
-
-            async cargarDatosFiltros() {
+            
+            async cargarDatos() {
                 try {
-                    this.materias_list = await (await fetch('/api/materias')).json();
-                    this.profesores_list = await (await fetch('/api/profesores')).json();
-                    this.cargarEventos();
-                } catch (e) { console.error("Error cargando filtros", e); }
-            },
-
-            async cargarEventos() {
-                try {
+                    // Cargar catálogos
+                    this.materias_db = await (await fetch('/api/materias')).json();
+                    this.profesores_db = await (await fetch('/api/profesores')).json();
+                    // Cargar eventos
                     const res = await fetch('/api/horario');
                     this.allEvents = await res.json();
                     this.aplicarFiltros();
-                } catch (e) { console.error("Error cargando horario", e); }
+                } catch (e) { console.error("Error cargando datos", e); }
+            },
+
+            limpiarFiltrosSecundarios() {
+                this.filtros.materiaNombre = '';
+                this.filtros.materiaId = '';
+                this.filtros.profesor = '';
+                this.aplicarFiltros();
+            },
+
+            limpiarTodo() {
+                this.vistaModalidad = 'ALL';
+                this.limpiarFiltrosSecundarios();
             },
 
             aplicarFiltros() {
-                const filtrados = this.allEvents.filter(e => {
-                    // 1. Filtro de Modalidad (Vista)
-                    let passModalidad = true;
-                    if (this.vistaModalidad === 'REGULAR') {
-                        // Solo si es estrictamente REGULAR
-                        passModalidad = (e.extendedProps.modalidad === 'REGULAR');
-                    } else if (this.vistaModalidad === 'ONLINE') {
-                        // Si contiene ONLINE (ya sea LJ o FDS)
-                        passModalidad = e.extendedProps.modalidad.includes('ONLINE');
-                    }
-
-                    // 2. Filtro Materia General (Nombre Texto)
-                    let passMatName = true;
+                // Filtro Final que va al Calendario
+                const filtrados = this.eventosBaseModalidad.filter(e => {
+                    // Materia Nombre
                     if (this.filtros.materiaNombre) {
-                        // Buscamos el nombre en la lista usando el ID del evento
-                        const matObj = this.materias_list.find(m => m.id === e.extendedProps.materia_id);
-                        if (matObj && matObj.nombre !== this.filtros.materiaNombre) passMatName = false;
+                        const m = this.materias_db.find(x => x.id === e.extendedProps.materia_id);
+                        if (!m || m.nombre !== this.filtros.materiaNombre) return false;
                     }
+                    // Materia ID
+                    if (this.filtros.materiaId && e.extendedProps.materia_id !== this.filtros.materiaId) return false;
+                    // Profesor
+                    if (this.filtros.profesor && e.extendedProps.profesor_id !== this.filtros.profesor) return false;
 
-                    // 3. Filtros Específicos
-                    const passMateria = !this.filtros.materiaId || e.extendedProps.materia_id === this.filtros.materiaId;
-                    const passProfe = !this.filtros.profesor || e.extendedProps.profesor_id === this.filtros.profesor;
-                    
-                    return passModalidad && passMatName && passMateria && passProfe;
+                    return true;
                 });
 
                 this.eventosVisibles = filtrados.length;
-
                 if (this.calendar) {
                     this.calendar.removeAllEvents();
                     this.calendar.addEventSource(filtrados);
                 }
-            },
-
-            limpiarFiltros() {
-                this.filtros.materiaNombre = '';
-                this.filtros.materiaId = '';
-                this.filtros.profesor = '';
-                this.vistaModalidad = 'ALL';
-                this.aplicarFiltros();
             },
 
             iniciarCalendario() {
@@ -211,14 +244,14 @@
                 this.calendar = new FullCalendar.Calendar(calendarEl, {
                     initialView: 'timeGridWeek',
                     locale: 'es',
-                    firstDay: 1, // CAMBIO: Iniciar en Lunes (1) para que el Domingo (día 6 de la api) sea visible al final
+                    firstDay: 1, // LUNES
                     hiddenDays: [], 
                     slotMinTime: '07:00:00',
-                    slotMaxTime: '22:00:00', 
+                    slotMaxTime: '22:00:00',
                     allDaySlot: false,
                     expandRows: true,
                     height: '100%',
-                    dayHeaderFormat: { weekday: 'long' }, // CAMBIO: Mostrar solo nombre del día (Lunes, Martes...)
+                    dayHeaderFormat: { weekday: 'long' }, // Solo nombre del día
                     headerToolbar: {
                         left: '',
                         center: '', 
@@ -233,8 +266,8 @@
             async generarHorario() {
                 const confirm = await Swal.fire({
                     title: '¿Generar nuevo horario?',
-                    text: "Se borrará el horario actual y se creará uno nuevo.",
-                    icon: 'question',
+                    text: "Se borrará el horario actual.",
+                    icon: 'warning',
                     showCancelButton: true,
                     confirmButtonText: 'Sí, generar'
                 });
@@ -242,14 +275,9 @@
                 if (confirm.isConfirmed) {
                     this.loading = true;
                     try {
-                        const res = await fetch('/api/generar', {method: 'POST'});
-                        const data = await res.json();
-                        if (res.ok) {
-                            Swal.fire('¡Éxito!', data.message, 'success');
-                            this.cargarEventos();
-                        } else {
-                            Swal.fire('Error', data.message, 'error');
-                        }
+                        await fetch('/api/generar', {method: 'POST'});
+                        await this.cargarDatos(); // Recargar todo
+                        Swal.fire('¡Éxito!', 'Horario generado', 'success');
                     } catch (e) {
                         Swal.fire('Error', 'Fallo de conexión', 'error');
                     } finally {

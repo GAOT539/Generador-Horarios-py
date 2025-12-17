@@ -26,9 +26,9 @@ def manage_materias():
             Materia.create(
                 nombre=data['nombre'],
                 nivel=int(data['nivel']),
-                cantidad_regular=int(data.get('cantidad_regular', 0)),
-                cantidad_online_lj=int(data.get('cantidad_online_lj', 0)),
-                cantidad_online_fds=int(data.get('cantidad_online_fds', 0))
+                cantidad_regular=int(data['cantidad_regular']),
+                cantidad_online_lj=int(data['cantidad_online_lj']),
+                cantidad_online_fds=int(data['cantidad_online_fds'])
             )
             return jsonify({'status': 'ok'})
         except Exception as e:
@@ -149,15 +149,11 @@ def get_horario():
     eventos = []
     horarios = Horario.select().join(Materia).switch(Horario).join(Profesor).switch(Horario).join(Curso)
     
-    # Mapeo de Días Numéricos a Fechas Reales para FullCalendar (Semana Base Nov 2023)
+    # Fechas Base (Semana Lunes 20 a Domingo 26)
     fechas_base = { 
-        0: '2023-11-20', # Lunes
-        1: '2023-11-21', # Martes
-        2: '2023-11-22', # Miércoles
-        3: '2023-11-23', # Jueves
-        4: '2023-11-24', # Viernes
-        5: '2023-11-25', # Sábado
-        6: '2023-11-26'  # Domingo
+        0: '2023-11-20', 1: '2023-11-21', 2: '2023-11-22', 
+        3: '2023-11-23', 4: '2023-11-24', 5: '2023-11-25', 
+        6: '2023-11-26'
     }
 
     for h in horarios:
@@ -166,26 +162,27 @@ def get_horario():
         start = f"{h.hora_inicio:02d}:00:00"
         end = f"{h.hora_fin:02d}:00:00"
         
-        # --- LÓGICA DE COLORES Y ETIQUETAS ---
+        # --- FORMATO Y COLORES ---
         mod_tag = ""
-        color = '#3788d8' # Default Regular Matutino
+        color = '#3788d8' # Default Azul
 
-        # Detectamos si es cualquier tipo de ONLINE (LJ o FDS)
         if 'ONLINE' in h.curso.modalidad:
+            mod_tag = "[ON]"
             if 'FDS' in h.curso.modalidad:
-                mod_tag = "[ON-FDS]"
-                color = '#fd7e14' # Naranja para Online Finde
+                color = '#fd7e14' # Naranja Online FDS
             else:
-                mod_tag = "[ON-LJ]"
-                color = '#6f42c1' # Morado para Online L-J
+                color = '#6f42c1' # Morado Online LJ
         else:
-            # Regular Presencial
+            # Presencial
             if h.curso.turno == 'Vespertino':
-                color = '#28a745' # Verde para Tarde
+                color = '#28a745' # Verde Tarde
             else:
-                color = '#3788d8' # Azul para Mañana
+                color = '#3788d8' # Azul Mañana
 
-        titulo = f"{mod_tag} {h.materia.nombre} ({h.curso.nombre})\n{h.profesor.nombre}"
+        # Formato Solicitado:
+        # [ON]Materia - Nivel (curso) Profesor
+        tag_str = f"{mod_tag} " if mod_tag else ""
+        titulo = f"{tag_str}{h.materia.nombre} - {h.materia.nivel} ({h.curso.nombre})\n{h.profesor.nombre}"
         
         eventos.append({
             'title': titulo,
@@ -196,7 +193,7 @@ def get_horario():
                 'materia_id': h.materia.id,
                 'profesor_id': h.profesor.id,
                 'curso_turno': h.curso.turno,
-                'modalidad': h.curso.modalidad # Pasamos la modalidad exacta (ONLINE_LJ, etc)
+                'modalidad': h.curso.modalidad
             }
         })
         
@@ -217,11 +214,7 @@ def get_estadisticas():
     reporte = []
     
     for p in profesores:
-        bloques_asignados = conteo_bloques.get(p.id, 0)
-        # OJO: Esto es aproximado, ya que bloques de FDS valen 4h y L-J valen 2h
-        # Lo ideal sería sumar horas reales, pero para visualización rápida sirve
         horas_reales = 0
-        # Recalculamos horas reales iterando sus horarios
         mis_horarios = [x for x in asignaciones if x.profesor.id == p.id]
         for mh in mis_horarios:
             duracion = mh.hora_fin - mh.hora_inicio
