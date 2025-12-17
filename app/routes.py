@@ -23,16 +23,16 @@ def manage_materias():
     if request.method == 'POST':
         data = request.json
         try:
-            # CAMBIO: Guardamos regular y online por separado
             Materia.create(
                 nombre=data['nombre'],
                 nivel=int(data['nivel']),
-                cantidad_regular=int(data['cantidad_regular']),
-                cantidad_online=int(data['cantidad_online'])
+                cantidad_regular=int(data.get('cantidad_regular', 0)),
+                cantidad_online_lj=int(data.get('cantidad_online_lj', 0)),
+                cantidad_online_fds=int(data.get('cantidad_online_fds', 0))
             )
             return jsonify({'status': 'ok'})
-        except Exception:
-            return jsonify({'error': 'Duplicado o error de datos'}), 400
+        except Exception as e:
+            return jsonify({'error': str(e)}), 400
             
     if request.method == 'DELETE':
         materia_id = request.args.get('id')
@@ -49,9 +49,9 @@ def manage_materias():
             'id': m.id,
             'nombre': m.nombre,
             'nivel': m.nivel,
-            # CAMBIO: Enviamos los dos valores al frontend
             'cantidad_regular': m.cantidad_regular,
-            'cantidad_online': m.cantidad_online,
+            'cantidad_online_lj': m.cantidad_online_lj,
+            'cantidad_online_fds': m.cantidad_online_fds,
             'nombre_completo': f"{m.nombre} (Nivel {m.nivel})"
         })
     return jsonify(lista)
@@ -114,8 +114,6 @@ def delete_profesor(id):
 # --- API CURSOS ---
 @bp.route('/api/cursos', methods=['GET', 'POST', 'DELETE'])
 def manage_cursos():
-    # Nota: Esta ruta es para gestión manual, el solver usa su propia lógica.
-    # Actualizaremos la creación manual si es necesario, pero el solver es el principal.
     if request.method == 'POST':
         data = request.json
         try:
@@ -123,7 +121,7 @@ def manage_cursos():
                 nivel=int(data['nivel']),
                 nombre=data['letra'],
                 turno=data['turno'],
-                modalidad=data.get('modalidad', 'REGULAR') # Default
+                modalidad=data.get('modalidad', 'REGULAR')
             )
             return jsonify({'status': 'ok'})
         except Exception:
@@ -150,9 +148,15 @@ def generar():
 def get_horario():
     eventos = []
     horarios = Horario.select().join(Materia).switch(Horario).join(Profesor).switch(Horario).join(Curso)
-    
+
     fechas_base = { 
-        0: '2023-11-20', 1: '2023-11-21', 2: '2023-11-22', 3: '2023-11-23'
+        0: '2023-11-20', # Lunes
+        1: '2023-11-21', # Martes
+        2: '2023-11-22', # Miércoles
+        3: '2023-11-23', # Jueves
+        4: '2023-11-24', # Viernes (Relleno, no usado en este modelo)
+        5: '2023-11-25', # Sábado (Online)
+        6: '2023-11-26'  # Domingo (Online)
     }
 
     for h in horarios:
@@ -161,15 +165,22 @@ def get_horario():
         start = f"{h.hora_inicio:02d}:00:00"
         end = f"{h.hora_fin:02d}:00:00"
         
-        # Mostramos la modalidad en el título para diferenciar
-        mod_tag = "[OL]" if h.curso.modalidad == 'ONLINE' else ""
+        # Etiqueta visual y Color según Modalidad
+        mod_tag = ""
+        color = '#3788d8' # Default Regular Matutino
+
+        if h.curso.modalidad == 'ONLINE':
+            mod_tag = "[ON]"
+            color = '#6f42c1' # Morado para Online
+        else:
+            # Regular
+            if h.curso.turno == 'Vespertino':
+                color = '#28a745' # Verde para Tarde
+            else:
+                color = '#3788d8' # Azul para Mañana
+
         titulo = f"{mod_tag} ({h.curso.nombre}) {h.materia.nombre} {h.materia.nivel}\n{h.profesor.nombre}"
         
-        # Color diferente para online si se desea, o mantenemos turno
-        color = '#3788d8' if h.curso.turno == 'Matutino' else '#28a745'
-        if h.curso.modalidad == 'ONLINE':
-            color = '#6f42c1' # Morado para Online (opcional, visual)
-
         eventos.append({
             'title': titulo,
             'start': f"{fechas_base[h.dia]}T{start}",
@@ -266,7 +277,6 @@ def restore_data():
             for m in data['materias']:
                 Materia.create(
                     nombre=m['nombre'], nivel=m['nivel'],
-                    # CAMBIO: Restaurar nuevos campos (con fallback por si es backup viejo)
                     cantidad_regular=m.get('cantidad_regular', m.get('cantidad_grupos', 0)),
                     cantidad_online=m.get('cantidad_online', 0)
                 )

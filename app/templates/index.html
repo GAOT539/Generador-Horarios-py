@@ -4,7 +4,20 @@
 <div id="app" style="height: calc(100vh - 100px); display: flex; flex-direction: column;">
     
     <div class="d-flex justify-content-between align-items-center mb-3">
-        <h2 class="text-primary fw-bold m-0">Calendario (Lunes - Jueves)</h2>
+        <div>
+            <h2 class="text-primary fw-bold m-0 d-inline-block me-3">📅 Calendario Académico</h2>
+            
+            <div class="btn-group" role="group">
+                <input type="radio" class="btn-check" name="modview" id="viewAll" value="ALL" v-model="vistaModalidad" @change="aplicarFiltros" checked>
+                <label class="btn btn-outline-primary" for="viewAll">Todos</label>
+
+                <input type="radio" class="btn-check" name="modview" id="viewReg" value="REGULAR" v-model="vistaModalidad" @change="aplicarFiltros">
+                <label class="btn btn-outline-success" for="viewReg">🏫 Regular</label>
+
+                <input type="radio" class="btn-check" name="modview" id="viewOnl" value="ONLINE" v-model="vistaModalidad" @change="aplicarFiltros">
+                <label class="btn btn-outline-purple" for="viewOnl">💻 Online</label>
+            </div>
+        </div>
         
         <div class="d-flex gap-2">
             <button @click="generarHorario" class="btn btn-primary shadow-sm" :disabled="loading">
@@ -26,7 +39,7 @@
         </div>
 
         <div class="sidebar-filtros bg-light border-start p-3" :class="{ 'open': sidebarOpen }">
-            <h5 class="mb-3 fw-bold text-secondary">🔍 Filtrar Horario</h5>
+            <h5 class="mb-3 fw-bold text-secondary">🔍 Filtros Avanzados</h5>
             
             <div class="mb-3">
                 <label class="form-label small fw-bold">Por Materia</label>
@@ -54,7 +67,7 @@
 
             <div class="mt-4 alert alert-info small">
                 <i class="fas fa-info-circle"></i> 
-                Se están mostrando <strong>[[ eventosVisibles ]]</strong> clases.
+                Mostrando <strong>[[ eventosVisibles ]]</strong> clases.
             </div>
         </div>
 
@@ -72,6 +85,15 @@
     .sidebar-filtros.open {
         margin-right: 0; /* Visible */
     }
+    /* Estilo botón Online */
+    .btn-outline-purple {
+        color: #6f42c1;
+        border-color: #6f42c1;
+    }
+    .btn-outline-purple:hover, .btn-check:checked + .btn-outline-purple {
+        background-color: #6f42c1;
+        color: white;
+    }
 </style>
 
 <script src='https://cdn.jsdelivr.net/npm/fullcalendar@6.1.10/index.global.min.js'></script>
@@ -84,15 +106,15 @@
         data() {
             return {
                 loading: false,
-                sidebarOpen: false, // Estado del menú lateral
+                sidebarOpen: false, 
                 calendar: null,
                 
-                // Datos crudos
                 allEvents: [],
                 materias_list: [],
                 profesores_list: [],
 
-                // Estado de filtros
+                // Filtros
+                vistaModalidad: 'ALL', // ALL, REGULAR, ONLINE
                 filtros: {
                     materia: '',
                     profesor: ''
@@ -107,17 +129,13 @@
         methods: {
             toggleSidebar() {
                 this.sidebarOpen = !this.sidebarOpen;
-                // Pequeño hack para que el calendario se ajuste al nuevo ancho
                 setTimeout(() => { this.calendar.updateSize(); }, 310);
             },
 
             async cargarDatosFiltros() {
                 try {
-                    // Cargamos listas para los selects
                     this.materias_list = await (await fetch('/api/materias')).json();
                     this.profesores_list = await (await fetch('/api/profesores')).json();
-                    
-                    // Cargamos los eventos (pero no los ponemos en el calendario aún)
                     this.cargarEventos();
                 } catch (e) { console.error("Error cargando filtros", e); }
             },
@@ -126,21 +144,29 @@
                 try {
                     const res = await fetch('/api/horario');
                     this.allEvents = await res.json();
-                    this.aplicarFiltros(); // Esto llenará el calendario
+                    this.aplicarFiltros();
                 } catch (e) { console.error("Error cargando horario", e); }
             },
 
             aplicarFiltros() {
-                // Filtramos en memoria
                 const filtrados = this.allEvents.filter(e => {
+                    // 1. Filtro de Modalidad (Vista)
+                    let passModalidad = true;
+                    if (this.vistaModalidad === 'REGULAR') {
+                        passModalidad = (e.extendedProps.modalidad === 'REGULAR');
+                    } else if (this.vistaModalidad === 'ONLINE') {
+                        passModalidad = (e.extendedProps.modalidad === 'ONLINE');
+                    }
+
+                    // 2. Filtros Específicos
                     const passMateria = !this.filtros.materia || e.extendedProps.materia_id === this.filtros.materia;
                     const passProfe = !this.filtros.profesor || e.extendedProps.profesor_id === this.filtros.profesor;
-                    return passMateria && passProfe;
+                    
+                    return passModalidad && passMateria && passProfe;
                 });
 
                 this.eventosVisibles = filtrados.length;
 
-                // Actualizamos FullCalendar
                 if (this.calendar) {
                     this.calendar.removeAllEvents();
                     this.calendar.addEventSource(filtrados);
@@ -150,6 +176,7 @@
             limpiarFiltros() {
                 this.filtros.materia = '';
                 this.filtros.profesor = '';
+                this.vistaModalidad = 'ALL';
                 this.aplicarFiltros();
             },
 
@@ -158,20 +185,20 @@
                 this.calendar = new FullCalendar.Calendar(calendarEl, {
                     initialView: 'timeGridWeek',
                     locale: 'es',
-                    hiddenDays: [0, 5, 6], // Oculta Dom, Vie, Sab
+                    // CAMBIO: Se muestran todos los días, ya que Online usa FDS
+                    hiddenDays: [], 
                     slotMinTime: '07:00:00',
-                    slotMaxTime: '21:00:00',
+                    slotMaxTime: '22:00:00', // Hasta las 10 PM para ver bien el bloque de las 21:00
                     allDaySlot: false,
                     expandRows: true,
-                    height: '100%', // Ocupa todo el alto disponible
-                    dayHeaderFormat: { weekday: 'long' },
+                    height: '100%',
+                    dayHeaderFormat: { weekday: 'short', day: 'numeric' }, // Ej: Lun 20
                     headerToolbar: {
                         left: '',
                         center: '', 
                         right: 'timeGridWeek,timeGridDay'
                     },
                     initialDate: '2023-11-20',
-                    // events: ... YA NO SE USA AQUÍ, lo manejamos manual con addEventSource
                     eventColor: '#3788d8'
                 });
                 this.calendar.render();
@@ -193,7 +220,7 @@
                         const data = await res.json();
                         if (res.ok) {
                             Swal.fire('¡Éxito!', data.message, 'success');
-                            this.cargarEventos(); // Recargar datos
+                            this.cargarEventos();
                         } else {
                             Swal.fire('Error', data.message, 'error');
                         }

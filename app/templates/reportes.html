@@ -155,23 +155,22 @@
             },
 
             // --- LÓGICA DE IMPRESIÓN (PDF) ---
-            
-            // Función genérica para abrir ventana de impresión
             printHTML(titulo, contenidoHTML) {
-                const printWindow = window.open('', '', 'height=600,width=800');
+                const printWindow = window.open('', '', 'height=600,width=1000');
                 printWindow.document.write('<html><head><title>' + titulo + '</title>');
-                // Estilos básicos para el PDF
                 printWindow.document.write(`
                     <style>
                         body { font-family: sans-serif; padding: 20px; }
-                        h1 { text-align: center; color: #333; }
-                        table { width: 100%; border-collapse: collapse; margin-top: 20px; }
-                        th, td { border: 1px solid #999; padding: 8px; text-align: center; font-size: 12px; }
+                        h1 { text-align: center; color: #333; margin-bottom: 5px; }
+                        h2 { text-align: center; color: #666; margin-top: 0; }
+                        table { width: 100%; border-collapse: collapse; margin-top: 20px; table-layout: fixed; }
+                        th, td { border: 1px solid #999; padding: 5px; text-align: center; font-size: 11px; word-wrap: break-word; }
                         th { background-color: #eee; }
                         .header { margin-bottom: 20px; border-bottom: 2px solid #333; padding-bottom: 10px; }
-                        .turno-tag { padding: 2px 5px; border-radius: 4px; font-size: 10px; color: white; }
-                        .mat { background-color: #3788d8; }
-                        .vesp { background-color: #28a745; }
+                        /* Colores */
+                        .mat { background-color: #3788d8; color: white; } /* Azul Mañana */
+                        .vesp { background-color: #28a745; color: white; } /* Verde Tarde */
+                        .onl { background-color: #6f42c1; color: white; }  /* Morado Online */
                     </style>
                 `);
                 printWindow.document.write('</head><body>');
@@ -192,7 +191,6 @@
             },
 
             imprimirHorarioProfesor() {
-                // Filtrar eventos del profe
                 const eventos = this.horarios_raw.filter(h => h.extendedProps.profesor_id == this.profeSeleccionado);
                 const nombreProfe = this.reporte_profesores.find(p => p.id == this.profeSeleccionado).nombre;
 
@@ -201,18 +199,14 @@
                     return;
                 }
 
-                // Generar Tabla Semanal
                 let html = `<div class="header"><h1>Horario Individual</h1><h2>Profesor: ${nombreProfe}</h2></div>`;
                 html += this.generarTablaHorario(eventos);
-                
                 this.printHTML(`Horario - ${nombreProfe}`, html);
             },
 
             imprimirHorarioNivel() {
-                // Filtrar eventos por nivel (buscando en el título o extendedProps si lo tuvieramos, aquí parseamos el titulo es mas rapido)
-                // Truco: En el titulo viene "INGLES 1", buscamos el " 1"
                 const nivelStr = " " + this.nivelSeleccionado; 
-                const eventos = this.horarios_raw.filter(h => h.title.includes(nivelStr)); // Filtro básico por string
+                const eventos = this.horarios_raw.filter(h => h.title.includes(nivelStr)); 
 
                 if(eventos.length === 0) {
                     Swal.fire('Aviso', 'No hay clases para este nivel.', 'warning');
@@ -221,24 +215,29 @@
 
                 let html = `<div class="header"><h1>Horario Grupal</h1><h2>Nivel ${this.nivelSeleccionado}</h2></div>`;
                 html += this.generarTablaHorario(eventos);
-                
                 this.printHTML(`Horario - Nivel ${this.nivelSeleccionado}`, html);
             },
 
-            // Helper para dibujar la tabla Lunes-Jueves
+            // Generador de tabla Lunes - Domingo
             generarTablaHorario(eventos) {
-                // Mapeo de slots a filas
-                const slots = [7, 9, 11, 14, 16, 18];
-                const dias = ['Lunes', 'Martes', 'Miércoles', 'Jueves'];
-                const fechasMap = {'2023-11-20': 0, '2023-11-21': 1, '2023-11-22': 2, '2023-11-23': 3};
+                // Todos los slots posibles (Mañana, Tarde, Noche)
+                const slots = [7, 9, 11, 13, 15, 17, 19];
+                const dias = ['Lunes', 'Martes', 'Miércoles', 'Jueves', 'Viernes', 'Sábado', 'Domingo'];
+                
+                // Mapeo fechas base a índices 0-6
+                const fechasMap = {
+                    '2023-11-20': 0, '2023-11-21': 1, '2023-11-22': 2, '2023-11-23': 3,
+                    '2023-11-24': 4, '2023-11-25': 5, '2023-11-26': 6
+                };
 
-                let table = `<table><thead><tr><th>Hora</th><th>Lunes</th><th>Martes</th><th>Miércoles</th><th>Jueves</th></tr></thead><tbody>`;
+                let table = `<table><thead><tr><th style="width: 80px;">Hora</th>`;
+                dias.forEach(d => table += `<th>${d}</th>`);
+                table += `</tr></thead><tbody>`;
 
                 slots.forEach(slot => {
                     table += `<tr><td><strong>${slot}:00 - ${slot+2}:00</strong></td>`;
                     dias.forEach((dia, index) => {
-                        // Buscar evento que coincida con dia (index) y hora (slot)
-                        // FullCalendar usa fechas ISO, necesitamos matchear el dia
+                        // Buscar evento
                         const evento = eventos.find(e => {
                             const fecha = e.start.split('T')[0];
                             const hora = parseInt(e.start.split('T')[1].split(':')[0]);
@@ -246,11 +245,13 @@
                         });
 
                         if (evento) {
-                            // Limpiamos el título para que se vea bien en PDF
-                            // (A) INGLES 1 \n PROFESOR -> (A) INGLES 1 <br> PROFESOR
                             const contenido = evento.title.replace('\n', '<br>');
-                            const colorClass = evento.color === '#3788d8' ? 'mat' : 'vesp';
-                            table += `<td class="${colorClass}" style="color:white;">${contenido}</td>`;
+                            // Determinar clase CSS según color
+                            let colorClass = 'mat';
+                            if (evento.color === '#28a745') colorClass = 'vesp';
+                            if (evento.color === '#6f42c1') colorClass = 'onl';
+                            
+                            table += `<td class="${colorClass}">${contenido}</td>`;
                         } else {
                             table += `<td>-</td>`;
                         }

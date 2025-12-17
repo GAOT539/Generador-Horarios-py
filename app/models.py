@@ -1,5 +1,3 @@
-# app/models.py
-
 from peewee import Model, CharField, IntegerField, ForeignKeyField
 from app.database import db
 
@@ -11,8 +9,10 @@ class BaseModel(Model):
 class Materia(BaseModel):
     nombre = CharField() 
     nivel = IntegerField() 
-    cantidad_regular = IntegerField(default=0) # Presencial
-    cantidad_online = IntegerField(default=0)  # En Línea
+    # CAMBIO: Desglose detallado de demanda
+    cantidad_regular = IntegerField(default=0)      # Lunes a Jueves (Presencial)
+    cantidad_online_lj = IntegerField(default=0)    # Lunes a Jueves (Online)
+    cantidad_online_fds = IntegerField(default=0)   # Sábado y Domingo (Online)
     
     class Meta:
         indexes = ((('nombre', 'nivel'), True),)
@@ -20,7 +20,7 @@ class Materia(BaseModel):
 class Curso(BaseModel):
     nombre = CharField() 
     nivel = IntegerField() 
-    turno = CharField() 
+    turno = CharField()     # Matutino, Vespertino, Nocturno, FDS
     modalidad = CharField() # 'REGULAR' o 'ONLINE'
 
 # --- 2. DOCENTES ---
