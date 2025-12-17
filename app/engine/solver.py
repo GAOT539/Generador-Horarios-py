@@ -13,25 +13,21 @@ def generar_horario_automatico():
     
     with db.atomic():
         for m in materias:
-            # 1. Crear Cursos REGULARES (Balanceo Matutino/Vespertino)
-            # Lunes a Jueves
+            # 1. Crear Cursos REGULARES
             cant_reg = min(m.cantidad_regular, 14)
             for i in range(cant_reg):
                 letra = letras[i]
                 turno = 'Matutino' if i % 2 == 0 else 'Vespertino' 
                 Curso.create(nombre=letra, nivel=m.nivel, turno=turno, modalidad='REGULAR')
                 
-            # 2. Crear Cursos ONLINE L-J (Balanceo Matutino/Nocturno)
-            # Se comportan como los regulares pero con preferencia de bloques extremos
+            # 2. Crear Cursos ONLINE L-J
             cant_online_lj = min(m.cantidad_online_lj, 10)
             for i in range(cant_online_lj):
                 nombre_curso = f"OL-LJ{i+1}"
-                # Alternancia: Pares -> Mañana, Impares -> Noche
                 turno = 'Matutino' if i % 2 == 0 else 'Nocturno'
                 Curso.create(nombre=nombre_curso, nivel=m.nivel, turno=turno, modalidad='ONLINE_LJ')
 
-            # 3. Crear Cursos ONLINE Fin de Semana (Sáb y Dom)
-            # Estos son fijos para FDS
+            # 3. Crear Cursos ONLINE Fin de Semana
             cant_online_fds = min(m.cantidad_online_fds, 5)
             for i in range(cant_online_fds):
                 nombre_curso = f"OL-FDS{i+1}"
@@ -39,9 +35,9 @@ def generar_horario_automatico():
 
     # --- CARGA DE DATOS ---
     profesores = list(Profesor.select())
+    profesores_map = {p.id: p.nombre for p in profesores}
     cursos = list(Curso.select()) 
     
-    # Filtramos materias que tengan alguna demanda
     materias_planificadas = []
     for m in materias:
         if m.cantidad_regular > 0 or m.cantidad_online_lj > 0 or m.cantidad_online_fds > 0:
@@ -54,22 +50,17 @@ def generar_horario_automatico():
     model = cp_model.CpModel()
     
     # DEFINICIÓN DE BLOQUES HORARIOS
-    
-    # BLOQUES L-J (2 horas x 4 días = 8 horas)
     SLOTS_LJ_MAT = [7, 9, 11]
     SLOTS_LJ_VESP = [13, 15, 17] 
     SLOTS_LJ_NOCHE = [19]        
     ALL_SLOTS_LJ = sorted(SLOTS_LJ_MAT + SLOTS_LJ_VESP + SLOTS_LJ_NOCHE)
 
-    # BLOQUES FDS (4 horas Sábado + 4 horas Domingo = 8 horas)
+    # BLOQUES FDS
     SLOT_FDS_INICIO = [7] 
 
-    # Variables principales: shifts[(clase_idx, p_id, slot, tipo_dia)]
-    # tipo_dia: 0=L-J, 1=Sábado, 2=Domingo
     shifts = {}
     clases_a_programar = []
 
-    # Agrupación para optimizar
     cursos_por_nivel = {}
     for c in cursos:
         if c.nivel not in cursos_por_nivel: cursos_por_nivel[c.nivel] = []
@@ -95,26 +86,19 @@ def generar_horario_automatico():
                 'modalidad': curso.modalidad
             })
 
-    # Generación de variables de decisión
     for c_idx, clase in enumerate(clases_a_programar):
         curso = clase['curso']
-        opciones_validas = [] # (slot, tipo_dia)
+        opciones_validas = [] 
 
         if curso.modalidad == 'REGULAR':
-            # Solo Lunes-Jueves
             slots_target = SLOTS_LJ_MAT if curso.turno == 'Matutino' else SLOTS_LJ_VESP
             for s in slots_target: opciones_validas.append((s, 0)) # 0 = L-J
         
         elif curso.modalidad == 'ONLINE_LJ':
-            # Solo Lunes-Jueves (Prioridad Mañana o Noche)
-            if curso.turno == 'Matutino':
-                for s in [7, 9]: opciones_validas.append((s, 0))
-            else: # Nocturno
-                for s in SLOTS_LJ_NOCHE: opciones_validas.append((s, 0))
+            # Flexibilidad total
+            for s in ALL_SLOTS_LJ: opciones_validas.append((s, 0))
 
         elif curso.modalidad == 'ONLINE_FDS':
-            # Solo Fin de Semana
-            # REGLA 4 HORAS: Solo un slot posible (7:00 a 11:00)
             for s in SLOT_FDS_INICIO:
                 opciones_validas.append((s, 1)) # Sábado
                 opciones_validas.append((s, 2)) # Domingo
@@ -125,40 +109,30 @@ def generar_horario_automatico():
 
     # --- RESTRICCIONES ---
 
-    # 1. Cada clase asignada 1 vez
-    # PARA FDS: Necesitamos que se asigne 1 vez en Sábado Y 1 vez en Domingo (Espejo)
-    
+    # 1. Asignación única
     for c_idx, clase in enumerate(clases_a_programar):
         mod = clase['modalidad']
         
         if mod in ['REGULAR', 'ONLINE_LJ']:
-            # Suma total debe ser 1 (un bloque L-J)
             vars_curso = [var for k, var in shifts.items() if k[0] == c_idx]
             model.Add(sum(vars_curso) == 1)
             
         elif mod == 'ONLINE_FDS':
-            # Aquí es el truco:
-            # Debe haber 1 asignación en Sábado y 1 en Domingo
             vars_sab = [var for k, var in shifts.items() if k[0] == c_idx and k[3] == 1]
             vars_dom = [var for k, var in shifts.items() if k[0] == c_idx and k[3] == 2]
             
             model.Add(sum(vars_sab) == 1)
             model.Add(sum(vars_dom) == 1)
 
-            # REGLA DE ESPEJO (MISMO PROFESOR, MISMA HORA)
-            # Si el profe P da la clase a las 7 el sábado, el mismo profe P debe darla a las 7 el domingo.
+            # Espejo
             for p_id in clase['profes_ids']:
                 for s in SLOT_FDS_INICIO:
-                    # Var Sábado vs Var Domingo
                     v_s = shifts.get((c_idx, p_id, s, 1))
                     v_d = shifts.get((c_idx, p_id, s, 2))
-                    
                     if v_s is not None and v_d is not None:
                         model.Add(v_s == v_d)
 
-    # 2. Conflictos de Profesor 
-    profes_ids_unicos = set(p.id for p in profesores)
-    
+    # 2. Conflictos Profesor
     vars_by_p_d_s = {}
     for k, var in shifts.items():
         _, p_id, slot, tipo_dia = k
@@ -169,106 +143,144 @@ def generar_horario_automatico():
     for key, vars_list in vars_by_p_d_s.items():
         model.Add(sum(vars_list) <= 1)
 
-    # 3. Restricciones Avanzadas (Consecutivos, Gap 2h)
+    # 3. Restricciones Avanzadas y Objetivos
     obj_consecutivos = []
     obj_profesores_activos = []
+    obj_prioridad_presencial = []
+    
+    # Listas de preferencia Online por Niveles
+    obj_preferencia_online_high = [] # Peso 100
+    obj_preferencia_online_med = []  # Peso 50
+    obj_preferencia_online_low = []  # Peso 45 (NUEVO)
+
+    for c_idx, clase in enumerate(clases_a_programar):
+        # A) PRIORIDAD PRESENCIAL
+        if clase['modalidad'] == 'REGULAR':
+            turno = clase['curso'].turno
+            target_slot = 7 if turno == 'Matutino' else 13 
+            for p_id in clase['profes_ids']:
+                var_target = shifts.get((c_idx, p_id, target_slot, 0))
+                if var_target is not None:
+                    obj_prioridad_presencial.append(var_target)
+        
+        # B) PREFERENCIA ONLINE
+        if clase['modalidad'] == 'ONLINE_LJ':
+            turno = clase['curso'].turno
+            for p_id in clase['profes_ids']:
+                if turno == 'Matutino':
+                    # Tier 1: 7 y 9 (Ideal) -> 100 pts
+                    v7 = shifts.get((c_idx, p_id, 7, 0))
+                    v9 = shifts.get((c_idx, p_id, 9, 0))
+                    if v7 is not None: obj_preferencia_online_high.append(v7)
+                    if v9 is not None: obj_preferencia_online_high.append(v9)
+                    
+                    # Tier 2: 11 y 13 (Fallback aceptable) -> 50 pts
+                    v11 = shifts.get((c_idx, p_id, 11, 0))
+                    v13 = shifts.get((c_idx, p_id, 13, 0))
+                    if v11 is not None: obj_preferencia_online_med.append(v11)
+                    if v13 is not None: obj_preferencia_online_med.append(v13)
+                    
+                    # Tier 3: 19 (Noche como última opción decente) -> 45 pts
+                    v19 = shifts.get((c_idx, p_id, 19, 0))
+                    if v19 is not None: obj_preferencia_online_low.append(v19)
+                    
+                else: # Nocturno
+                    # Tier 1: 19 -> 100 pts
+                    v19 = shifts.get((c_idx, p_id, 19, 0))
+                    if v19 is not None: obj_preferencia_online_high.append(v19)
+                    
+                    # Tier 2: 17 -> 50 pts
+                    v17 = shifts.get((c_idx, p_id, 17, 0))
+                    if v17 is not None: obj_preferencia_online_med.append(v17)
 
     for p in profesores:
         vars_total_semana = []
         
-        # Iteramos por tipos de día para ver Gaps y Cargas
-        for tipo_dia in [0, 1, 2]: # L-J, Sab, Dom
+        for tipo_dia in [0, 1, 2]: 
             if tipo_dia == 0:
                 slots_del_dia = ALL_SLOTS_LJ
                 duracion_bloque = 2
                 dias_reales = 4
             else:
-                slots_del_dia = SLOT_FDS_INICIO # Solo 7
-                duracion_bloque = 4 # Son bloques de 4 horas
+                slots_del_dia = SLOT_FDS_INICIO
+                duracion_bloque = 4
                 dias_reales = 1
 
-            # Primero creamos variables de trabajo en este slot (usado para carga y consecutivos)
             is_working = {}
             for s in slots_del_dia:
                 vars_en_slot = vars_by_p_d_s.get((p.id, tipo_dia, s), [])
                 trabaja_s = model.NewBoolVar(f'work_p{p.id}_d{tipo_dia}_s{s}')
                 model.Add(sum(vars_en_slot) == trabaja_s)
                 is_working[s] = trabaja_s
-                
-                # Carga Semanal
                 vars_total_semana.append(trabaja_s * duracion_bloque * dias_reales)
 
-            # --- VALIDACIÓN DE GAP DE MODALIDAD (REGLA CRÍTICA) Y CONSECUTIVOS ---
-            
-            # Recolectar variables por slot y modalidad para este profesor/dia
-            # vars_reg_in_slot[s] -> lista de vars Regular
-            # vars_onl_in_slot[s] -> lista de vars Online
-            
+            # GAP Y CONSECUTIVOS
             vars_reg_in_slot = {s: [] for s in slots_del_dia}
             vars_onl_in_slot = {s: [] for s in slots_del_dia}
             
-            # Iteración optimizada para separar variables
             for k, var in shifts.items():
-                # k = (c_idx, p_id, slot, tipo_dia)
                 if k[1] == p.id and k[3] == tipo_dia:
                     s = k[2]
                     if s in slots_del_dia:
                         mod = clases_a_programar[k[0]]['modalidad']
-                        if mod == 'REGULAR':
-                            vars_reg_in_slot[s].append(var)
-                        else: # ONLINE_LJ o ONLINE_FDS
-                            vars_onl_in_slot[s].append(var)
+                        if mod == 'REGULAR': vars_reg_in_slot[s].append(var)
+                        else: vars_onl_in_slot[s].append(var)
             
             is_reg_map = {}
             is_onl_map = {}
-            
             for s in slots_del_dia:
                 b_reg = model.NewBoolVar(f'breg_p{p.id}_d{tipo_dia}_s{s}')
                 b_onl = model.NewBoolVar(f'bonl_p{p.id}_d{tipo_dia}_s{s}')
-                
                 model.Add(sum(vars_reg_in_slot[s]) == b_reg)
                 model.Add(sum(vars_onl_in_slot[s]) == b_onl)
-                
                 is_reg_map[s] = b_reg
                 is_onl_map[s] = b_onl
 
-            # APLICAR RESTRICCIONES DE PARES (GAP) Y OBJETIVO (CONSECUTIVOS)
             if len(slots_del_dia) > 1:
                 for i in range(len(slots_del_dia) - 1):
                     s1 = slots_del_dia[i]
                     s2 = slots_del_dia[i+1]
-                    
-                    # Solo si son adyacentes temporalmente (gap 0)
                     if s2 - s1 == 2:
-                        # 1. GAP DE MODALIDAD (Solo tiene sentido en L-J donde se mezclan)
-                        # Prohibido: (Reg en s1 Y Onl en s2) O (Onl en s1 Y Reg en s2)
+                        # Gap
                         if tipo_dia == 0:
                             model.Add(is_reg_map[s1] + is_onl_map[s2] <= 1)
                             model.Add(is_onl_map[s1] + is_reg_map[s2] <= 1)
-                        
-                        # 2. OBJETIVO: CONSECUTIVOS
-                        # Premiar si trabaja en s1 Y trabaja en s2
+                        # Consecutivos
                         b_consec = model.NewBoolVar(f'cons_p{p.id}_d{tipo_dia}_{s1}_{s2}')
                         model.AddMultiplicationEquality(b_consec, [is_working[s1], is_working[s2]])
                         obj_consecutivos.append(b_consec)
 
-        # LÍMITES DE CARGA
+        # Carga Max
         if vars_total_semana:
             model.Add(sum(vars_total_semana) <= p.max_horas_semana)
-            
             is_active = model.NewBoolVar(f'active_p{p.id}')
             model.Add(sum(vars_total_semana) >= is_active)
             obj_profesores_activos.append(is_active)
 
-    # --- FUNCIÓN OBJETIVO ---
-    model.Maximize(sum(obj_consecutivos) * 10 + sum(obj_profesores_activos) * 1000)
+    # --- OBJETIVO ---
+    # PESOS SOLICITADOS:
+    # 1. Prioridad Presencial (10,000)
+    # 2. Profesores Activos (1,000)
+    # 3. Preferencia Online ALTA (100) -> 7am o 9am
+    # 4. Preferencia Online MEDIA (50) -> 11am o 1pm
+    # 5. Preferencia Online BAJA (45) -> 19pm
+    # 6. Consecutivos (10)
+    model.Maximize(
+        sum(obj_profesores_activos) * 1000 + 
+        sum(obj_prioridad_presencial) * 10000 + 
+        sum(obj_preferencia_online_high) * 100 +
+        sum(obj_preferencia_online_med) * 50 + 
+        sum(obj_preferencia_online_low) * 45 +
+        sum(obj_consecutivos) * 10
+    )
 
     # --- SOLVER ---
     solver = cp_model.CpSolver()
     status = solver.Solve(model)
 
     if status == cp_model.OPTIMAL or status == cp_model.FEASIBLE:
-        print(f"¡Solución encontrada!")
+        print(f"¡Solución encontrada! Objetivo: {solver.ObjectiveValue()}")
+
         count = 0
         with db.atomic():
             for key, var in shifts.items():
@@ -276,6 +288,14 @@ def generar_horario_automatico():
                     c_idx, p_id, slot_inicio, tipo_dia = key
                     datos = clases_a_programar[c_idx]
                     
+                    # Log en consola
+                    dia_str = "Lun-Jue" if tipo_dia == 0 else ("Sábado " if tipo_dia == 1 else "Domingo")
+                    materia_str = f"{datos['materia'].nombre} ({datos['curso'].nombre})"
+                    modalidad_str = " [REG]" if datos['modalidad'] == 'REGULAR' else " [ONL]"
+                    profe_nombre = profesores_map.get(p_id, f"ID {p_id}")
+                    
+                    print(f"{dia_str:<15} | {slot_inicio:02d}:00-{slot_inicio+2 if tipo_dia==0 else slot_inicio+4:02d}:00 | {materia_str + modalidad_str:<25} | {profe_nombre:<20}")
+
                     dias_a_grabar = []
                     duracion = 2
 
@@ -284,10 +304,10 @@ def generar_horario_automatico():
                         duracion = 2
                     elif tipo_dia == 1: # Sábado
                         dias_a_grabar = [5]
-                        duracion = 4 # Bloque de 4 horas
+                        duracion = 4 
                     elif tipo_dia == 2: # Domingo
                         dias_a_grabar = [6]
-                        duracion = 4 # Bloque de 4 horas
+                        duracion = 4 
 
                     for dia_num in dias_a_grabar:
                         Horario.create(
@@ -299,6 +319,7 @@ def generar_horario_automatico():
                             curso_id=datos['curso'].id
                         )
                     count += 1
+        print("-" * 75)
         return {"status": "ok", "message": f"Horario generado. {count} bloques asignados."}
     
-    return {"status": "error", "message": "No se encontró solución."}
+    return {"status": "error", "message": "No se encontró solución viable."}
