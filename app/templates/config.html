@@ -23,25 +23,31 @@
                 <div class="col-md-4">
                     <div class="card p-3 shadow-sm border-primary mb-3">
                         <h5 class="text-primary">Planificar Demanda</h5>
-                        <p class="small text-muted">El sistema creará los cursos (A, B, C...) automáticamente según la cantidad.</p>
+                        <p class="small text-muted">Define cuántos cursos presenciales y online necesitas.</p>
                         <form @submit.prevent="crearMateria">
                             <div class="mb-2">
                                 <label>Asignatura</label>
                                 <input type="text" v-model="nuevaMateria.nombre" class="form-control" placeholder="Ej: INGLES" style="text-transform: uppercase;" required>
                             </div>
+                            <div class="mb-2">
+                                <label>Nivel</label>
+                                <select v-model="nuevaMateria.nivel" class="form-select" required>
+                                    <option>1</option><option>2</option><option>3</option><option>4</option>
+                                    <option>5</option><option>6</option><option>7</option><option>8</option>
+                                </select>
+                            </div>
+                            
                             <div class="row mb-2">
                                 <div class="col-6">
-                                    <label>Nivel</label>
-                                    <select v-model="nuevaMateria.nivel" class="form-select" required>
-                                        <option>1</option><option>2</option><option>3</option><option>4</option>
-                                        <option>5</option><option>6</option><option>7</option><option>8</option>
-                                    </select>
+                                    <label class="small fw-bold">Regulares</label>
+                                    <input type="number" v-model="nuevaMateria.cantidad_regular" class="form-control" min="0" required>
                                 </div>
                                 <div class="col-6">
-                                    <label>Cursos</label>
-                                    <input type="number" v-model="nuevaMateria.cantidad" class="form-control" min="1" required>
+                                    <label class="small fw-bold text-success">Online</label>
+                                    <input type="number" v-model="nuevaMateria.cantidad_online" class="form-control" min="0" required>
                                 </div>
                             </div>
+
                             <button class="btn btn-primary w-100">Guardar</button>
                         </form>
                     </div>
@@ -63,12 +69,21 @@
 
                 <div class="col-md-8">
                     <table class="table table-bordered table-hover">
-                        <thead class="table-light"><tr><th>Materia</th><th>Nivel</th><th>Cursos a crear</th><th>Acción</th></tr></thead>
+                        <thead class="table-light">
+                            <tr>
+                                <th>Materia</th>
+                                <th>Nivel</th>
+                                <th>Regulares</th>
+                                <th>Online</th>
+                                <th>Acción</th>
+                            </tr>
+                        </thead>
                         <tbody>
                             <tr v-for="m in materias_list">
                                 <td class="fw-bold">[[ m.nombre ]]</td>
                                 <td><span class="badge bg-secondary">Nivel [[ m.nivel ]]</span></td>
-                                <td><strong>[[ m.cantidad_grupos ]]</strong> <span class="text-muted small">(A, B...)</span></td>
+                                <td>[[ m.cantidad_regular ]]</td>
+                                <td class="text-success fw-bold">[[ m.cantidad_online ]]</td>
                                 <td class="text-end"><button @click="borrarMateria(m.id)" class="btn btn-sm btn-danger">🗑️</button></td>
                             </tr>
                         </tbody>
@@ -144,7 +159,6 @@
                         <div class="card-header bg-warning text-dark"><h5 class="mb-0">📤 Restaurar Datos</h5></div>
                         <div class="card-body">
                             <p class="small text-danger fw-bold">⚠️ ESTO BORRARÁ LOS DATOS ACTUALES</p>
-                            <p>Sube un archivo .json previamente descargado.</p>
                             <form @submit.prevent="subirRespaldo">
                                 <input type="file" ref="fileInput" class="form-control mb-3" accept=".json" required>
                                 <button class="btn btn-warning w-100 fw-bold">Restaurar Base de Datos</button>
@@ -166,7 +180,8 @@
         data() {
             return {
                 materias_list: [], profesores_list: [],
-                nuevaMateria: { nombre: '', nivel: 1, cantidad: 1 },
+                // CAMBIO: Inicialización de los dos campos de cantidad
+                nuevaMateria: { nombre: '', nivel: 1, cantidad_regular: 1, cantidad_online: 0 },
                 formProfe: { nombre: '', max_horas_dia: 6, materias_ids: [] }
             }
         },
@@ -187,28 +202,35 @@
             
             async crearMateria() {
                 if(!this.nuevaMateria.nombre) return;
+                // Validación de que al menos uno tenga cantidad
+                if(this.nuevaMateria.cantidad_regular == 0 && this.nuevaMateria.cantidad_online == 0) {
+                    this.showError("Debes agregar al menos 1 curso (Regular u Online)");
+                    return;
+                }
+
                 this.nuevaMateria.nombre = this.nuevaMateria.nombre.toUpperCase();
                 const res = await fetch('/api/materias', { method: 'POST', headers: {'Content-Type': 'application/json'}, body: JSON.stringify(this.nuevaMateria) });
-                if (res.ok) { this.nuevaMateria = { nombre: '', nivel: 1, cantidad: 1 }; this.cargarTodo(); this.showSuccess('Materia guardada'); }
-                else { const d = await res.json(); this.showError(d.error); }
+                if (res.ok) { 
+                    this.nuevaMateria = { nombre: '', nivel: 1, cantidad_regular: 1, cantidad_online: 0 }; 
+                    this.cargarTodo(); 
+                    this.showSuccess('Materia guardada'); 
+                } else { 
+                    const d = await res.json(); this.showError(d.error); 
+                }
             },
+            
             async borrarMateria(id) { if(await this.confirmDelete()) { await fetch('/api/materias?id='+id, {method:'DELETE'}); this.cargarTodo(); } },
             validarNombreProfe() { this.formProfe.nombre = this.formProfe.nombre.replace(/[^a-zA-ZñÑáéíóúÁÉÍÓÚ\s]/g, ''); },
             
             async guardarProfesor() {
-                // CAMBIO: Validación de máximo 2 niveles por materia
                 const nivelesPorMateria = {};
-                
                 this.formProfe.materias_ids.forEach(id => {
                     const mat = this.materias_list.find(m => m.id === id);
                     if (!mat) return;
-                    if (!nivelesPorMateria[mat.nombre]) {
-                        nivelesPorMateria[mat.nombre] = new Set();
-                    }
+                    if (!nivelesPorMateria[mat.nombre]) nivelesPorMateria[mat.nombre] = new Set();
                     nivelesPorMateria[mat.nombre].add(mat.nivel);
                 });
 
-                // Verificar si alguna materia tiene más de 2 niveles distintos
                 for (const [nombreMateria, niveles] of Object.entries(nivelesPorMateria)) {
                     if (niveles.size > 2) {
                         this.showError(`El profesor no puede impartir más de 2 niveles de ${nombreMateria}.`);
@@ -216,7 +238,6 @@
                     }
                 }
 
-                // Cálculo automático
                 const hDia = this.formProfe.max_horas_dia;
                 const hSem = hDia * 4; 
 
@@ -225,29 +246,22 @@
                 
                 this.formProfe.nombre = this.formProfe.nombre.toUpperCase();
                 
-                const payload = {
-                    ...this.formProfe,
-                    max_horas_semana: hSem
-                };
+                const payload = { ...this.formProfe, max_horas_semana: hSem };
 
                 const res = await fetch('/api/profesores', { method: 'POST', headers: {'Content-Type': 'application/json'}, body: JSON.stringify(payload) });
                 if(res.ok) { 
                     this.formProfe.nombre=''; this.formProfe.materias_ids=[]; 
                     this.cargarTodo(); this.showSuccess('Profesor OK'); 
-                }
-                else { this.showError("Error al guardar"); }
+                } else { this.showError("Error al guardar"); }
             },
 
-            // CAMBIO: Función para editar nombre
             async editarNombreProfesor(profesor) {
                 const { value: nuevoNombre } = await Swal.fire({
                     title: 'Editar Nombre',
                     input: 'text',
                     inputValue: profesor.nombre,
                     showCancelButton: true,
-                    inputValidator: (value) => {
-                        if (!value) return 'El nombre no puede estar vacío';
-                    }
+                    inputValidator: (value) => { if (!value) return 'El nombre no puede estar vacío'; }
                 });
 
                 if (nuevoNombre) {
@@ -258,12 +272,8 @@
                         body: JSON.stringify({ nombre: nombreMayus })
                     });
 
-                    if (res.ok) {
-                        await this.cargarTodo();
-                        this.showSuccess('Nombre actualizado');
-                    } else {
-                        this.showError('Error al actualizar');
-                    }
+                    if (res.ok) { this.cargarTodo(); this.showSuccess('Nombre actualizado'); } 
+                    else { this.showError('Error al actualizar'); }
                 }
             },
 
@@ -292,13 +302,9 @@
                         if (res.ok) {
                             Swal.fire('Restaurado', data.message, 'success');
                             this.cargarTodo();
-                            this.$refs.fileInput.value = '';
-                        } else {
-                            this.showError(data.error);
-                        }
-                    } catch (e) {
-                        this.showError("Error al subir archivo");
-                    }
+                            this.$refs.fileInput.value = ''; 
+                        } else { this.showError(data.error); }
+                    } catch (e) { this.showError("Error al subir archivo"); }
                 }
             }
         }

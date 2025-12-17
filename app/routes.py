@@ -23,10 +23,12 @@ def manage_materias():
     if request.method == 'POST':
         data = request.json
         try:
+            # CAMBIO: Guardamos regular y online por separado
             Materia.create(
                 nombre=data['nombre'],
                 nivel=int(data['nivel']),
-                cantidad_grupos=int(data['cantidad'])
+                cantidad_regular=int(data['cantidad_regular']),
+                cantidad_online=int(data['cantidad_online'])
             )
             return jsonify({'status': 'ok'})
         except Exception:
@@ -35,7 +37,6 @@ def manage_materias():
     if request.method == 'DELETE':
         materia_id = request.args.get('id')
         with db.atomic():
-            # Limpieza en cascada manual para seguridad
             Horario.delete().where(Horario.materia == materia_id).execute()
             ProfesorMateria.delete().where(ProfesorMateria.materia == materia_id).execute()
             Materia.delete().where(Materia.id == materia_id).execute()
@@ -48,7 +49,9 @@ def manage_materias():
             'id': m.id,
             'nombre': m.nombre,
             'nivel': m.nivel,
-            'cantidad_grupos': m.cantidad_grupos,
+            # CAMBIO: Enviamos los dos valores al frontend
+            'cantidad_regular': m.cantidad_regular,
+            'cantidad_online': m.cantidad_online,
             'nombre_completo': f"{m.nombre} (Nivel {m.nivel})"
         })
     return jsonify(lista)
@@ -71,8 +74,6 @@ def get_profesores():
 @bp.route('/api/profesores', methods=['POST'])
 def create_profesor():
     data = request.json
-    
-    # Validación: Evitar nombres duplicados
     if Profesor.select().where(Profesor.nombre == data['nombre']).exists():
         return jsonify({'error': f"El profesor {data['nombre']} ya existe."}), 400
 
@@ -89,7 +90,6 @@ def create_profesor():
         except Exception as e:
             return jsonify({'error': str(e)}), 400
 
-# CAMBIO SOLICITADO: Nueva ruta para editar nombre del profesor
 @bp.route('/api/profesores/<int:id>', methods=['PUT'])
 def update_profesor(id):
     data = request.json
@@ -103,17 +103,10 @@ def update_profesor(id):
 @bp.route('/api/profesores/<int:id>', methods=['DELETE'])
 def delete_profesor(id):
     try:
-        # CORRECCIÓN IMPORTANTE: Borrado Atómico y en Cascada
         with db.atomic():
-            # 1. Borrar clases del horario asignadas a este profesor
             Horario.delete().where(Horario.profesor == id).execute()
-            
-            # 2. Borrar sus competencias (relación materia-profesor)
             ProfesorMateria.delete().where(ProfesorMateria.profesor == id).execute()
-            
-            # 3. Finalmente borrar al profesor
             Profesor.delete().where(Profesor.id == id).execute()
-            
         return jsonify({'status': 'ok'})
     except Exception as e:
         return jsonify({'error': f"Error al borrar: {str(e)}"}), 400
@@ -121,13 +114,16 @@ def delete_profesor(id):
 # --- API CURSOS ---
 @bp.route('/api/cursos', methods=['GET', 'POST', 'DELETE'])
 def manage_cursos():
+    # Nota: Esta ruta es para gestión manual, el solver usa su propia lógica.
+    # Actualizaremos la creación manual si es necesario, pero el solver es el principal.
     if request.method == 'POST':
         data = request.json
         try:
             Curso.create(
                 nivel=int(data['nivel']),
                 nombre=data['letra'],
-                turno=data['turno']
+                turno=data['turno'],
+                modalidad=data.get('modalidad', 'REGULAR') # Default
             )
             return jsonify({'status': 'ok'})
         except Exception:
@@ -149,17 +145,14 @@ def generar():
     else:
         return jsonify(resultado), 400
 
-# --- API LEER HORARIO (SOLO LUNES-JUEVES) ---
+# --- API LEER HORARIO ---
 @bp.route('/api/horario', methods=['GET'])
 def get_horario():
     eventos = []
     horarios = Horario.select().join(Materia).switch(Horario).join(Profesor).switch(Horario).join(Curso)
     
     fechas_base = { 
-        0: '2023-11-20', 
-        1: '2023-11-21', 
-        2: '2023-11-22', 
-        3: '2023-11-23'
+        0: '2023-11-20', 1: '2023-11-21', 2: '2023-11-22', 3: '2023-11-23'
     }
 
     for h in horarios:
@@ -168,17 +161,25 @@ def get_horario():
         start = f"{h.hora_inicio:02d}:00:00"
         end = f"{h.hora_fin:02d}:00:00"
         
-        titulo = f"({h.curso.nombre}) {h.materia.nombre} {h.materia.nivel}\n{h.profesor.nombre}"
+        # Mostramos la modalidad en el título para diferenciar
+        mod_tag = "[OL]" if h.curso.modalidad == 'ONLINE' else ""
+        titulo = f"{mod_tag} ({h.curso.nombre}) {h.materia.nombre} {h.materia.nivel}\n{h.profesor.nombre}"
         
+        # Color diferente para online si se desea, o mantenemos turno
+        color = '#3788d8' if h.curso.turno == 'Matutino' else '#28a745'
+        if h.curso.modalidad == 'ONLINE':
+            color = '#6f42c1' # Morado para Online (opcional, visual)
+
         eventos.append({
             'title': titulo,
             'start': f"{fechas_base[h.dia]}T{start}",
             'end': f"{fechas_base[h.dia]}T{end}",
-            'color': '#3788d8' if h.curso.turno == 'Matutino' else '#28a745',
+            'color': color,
             'extendedProps': {
                 'materia_id': h.materia.id,
                 'profesor_id': h.profesor.id,
-                'curso_turno': h.curso.turno
+                'curso_turno': h.curso.turno,
+                'modalidad': h.curso.modalidad
             }
         })
         
@@ -192,8 +193,7 @@ def get_estadisticas():
     
     for h in asignaciones:
         p_id = h.profesor.id
-        if p_id not in conteo_bloques:
-            conteo_bloques[p_id] = 0
+        if p_id not in conteo_bloques: conteo_bloques[p_id] = 0
         conteo_bloques[p_id] += 1
 
     profesores = Profesor.select()
@@ -204,18 +204,13 @@ def get_estadisticas():
         horas_reales = bloques_asignados * 2 
         
         estado = "OK"
-        if horas_reales == 0:
-            estado = "SIN_CARGA"
-        elif horas_reales > p.max_horas_semana:
-            estado = "SOBRECARGA"
-        elif horas_reales < (p.max_horas_semana * 0.5): 
-            estado = "SUBUTILIZADO"
+        if horas_reales == 0: estado = "SIN_CARGA"
+        elif horas_reales > p.max_horas_semana: estado = "SOBRECARGA"
+        elif horas_reales < (p.max_horas_semana * 0.5): estado = "SUBUTILIZADO"
 
         reporte.append({
-            'id': p.id,
-            'nombre': p.nombre,
-            'horas_asignadas': horas_reales,
-            'horas_maximas': p.max_horas_semana,
+            'id': p.id, 'nombre': p.nombre,
+            'horas_asignadas': horas_reales, 'horas_maximas': p.max_horas_semana,
             'estado': estado,
             'porcentaje': round((horas_reales / p.max_horas_semana) * 100, 1) if p.max_horas_semana > 0 else 0
         })
@@ -249,22 +244,17 @@ def backup_data():
         'profesores': profesores_data
     }
     
-    return Response(
-        json.dumps(backup, indent=2),
-        mimetype="application/json",
-        headers={"Content-disposition": "attachment; filename=respaldo_configuracion.json"}
-    )
+    return Response(json.dumps(backup, indent=2), mimetype="application/json",
+        headers={"Content-disposition": "attachment; filename=respaldo_configuracion.json"})
 
 @bp.route('/api/restore', methods=['POST'])
 def restore_data():
-    if 'file' not in request.files:
-        return jsonify({'error': 'No se subió ningún archivo'}), 400
-    
+    if 'file' not in request.files: return jsonify({'error': 'No file'}), 400
     file = request.files['file']
     try:
         data = json.load(file)
         if data.get('system_signature') != 'GENERADOR_HORARIOS_V1':
-            return jsonify({'error': 'Firma inválida. Este archivo no pertenece a este sistema.'}), 400
+            return jsonify({'error': 'Firma inválida.'}), 400
         
         with db.atomic():
             Horario.delete().execute()
@@ -275,9 +265,10 @@ def restore_data():
 
             for m in data['materias']:
                 Materia.create(
-                    nombre=m['nombre'],
-                    nivel=m['nivel'],
-                    cantidad_grupos=m['cantidad_grupos']
+                    nombre=m['nombre'], nivel=m['nivel'],
+                    # CAMBIO: Restaurar nuevos campos (con fallback por si es backup viejo)
+                    cantidad_regular=m.get('cantidad_regular', m.get('cantidad_grupos', 0)),
+                    cantidad_online=m.get('cantidad_online', 0)
                 )
 
             for p in data['profesores']:
@@ -292,9 +283,5 @@ def restore_data():
                     if materia_obj:
                         ProfesorMateria.create(profesor=nuevo_profe, materia=materia_obj)
         
-        return jsonify({'status': 'ok', 'message': 'Base de datos restaurada correctamente.'})
-
-    except json.JSONDecodeError:
-        return jsonify({'error': 'El archivo no es un JSON válido'}), 400
-    except Exception as e:
-        return jsonify({'error': f'Error procesando datos: {str(e)}'}), 500
+        return jsonify({'status': 'ok', 'message': 'Restaurado.'})
+    except Exception as e: return jsonify({'error': str(e)}), 500

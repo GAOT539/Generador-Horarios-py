@@ -9,19 +9,22 @@ class BaseModel(Model):
 class Materia(BaseModel):
     nombre = CharField() 
     nivel = IntegerField() 
-    cantidad_grupos = IntegerField(default=1) 
+    # CAMBIO: Separación de demanda por modalidad
+    cantidad_regular = IntegerField(default=0) # Presencial
+    cantidad_online = IntegerField(default=0)  # En Línea
     
     class Meta:
         indexes = ((('nombre', 'nivel'), True),)
 
 class Curso(BaseModel):
-    nombre = CharField() 
+    nombre = CharField() # Ej: "A", "B" o "OL1"
     nivel = IntegerField() 
     turno = CharField() 
+    # CAMBIO: Campo para distinguir modalidad
+    modalidad = CharField() # 'REGULAR' o 'ONLINE'
 
 # --- 2. DOCENTES ---
 class Profesor(BaseModel):
-    # AHORA EL NOMBRE ES ÚNICO PARA EVITAR DUPLICADOS
     nombre = CharField(unique=True)
     max_horas_semana = IntegerField(default=20)
     max_horas_dia = IntegerField(default=6)

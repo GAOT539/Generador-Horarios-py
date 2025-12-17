@@ -184,3 +184,11 @@ El módulo de calendario debe presentar la información dividida claramente seg�
 - Vista o sección para PROGRAMA REGULAR.
 - Vista o sección para MODALIDAD EN LÍNEA.
   Esto permitirá identificar rápidamente la carga presencial vs. la virtual.
+
+
+### **Observación**
+
+**(Máximo horas semana):** El algoritmo actual  **no valida explícitamente el máximo de horas semanales dentro del solver** .
+
+Configurar el Solver para que, si el día es Sábado (`dia=5`), trate el bloque como "Indivisible".
+Modificar y asignar cuantos cursos son necesarios en la mañana y en la tarde de forma manual.
