@@ -386,7 +386,7 @@
         data() {
             return {
                 loading: true,
-                estadisticas: { profesores: [], resumen: {} }, // Inicializar resumen vacío
+                estadisticas: { profesores: [], resumen: {} }, 
                 profesores_list: [],
                 materias_list: [],
                 allEvents: [],
@@ -434,7 +434,7 @@
                 finally { this.loading = false; }
             },
 
-            // --- Lógica Reporte Resumido ---
+            // --- Lógica Reporte Resumido (CORREGIDO FDS UNIFICADO) ---
             procesarReporteGeneral() {
                 const agrupado = {};
                 this.allEvents.forEach(ev => {
@@ -454,10 +454,14 @@
                     let textoHorario = "";
                     let ordenDia = 0;
 
-                    if (diaSemana >= 1 && diaSemana <= 4) { 
+                    // CORRECCIÓN: Detectar FDS primero y unificar texto
+                    if (props.modalidad.includes('FDS')) {
+                        textoHorario = `sábado y domingo ${hIniStr} a ${hFinStr}`;
+                        ordenDia = 3;
+                    } else if (diaSemana >= 1 && diaSemana <= 4) { 
                         textoHorario = `lunes a jueves ${hIniStr} - ${hFinStr}`;
                         ordenDia = 1;
-                    } else if (diaSemana === 6) { 
+                    } else if (diaSemana === 6) { // Caso raro si no fuera FDS
                         textoHorario = `sábado ${hIniStr} a ${hFinStr}`;
                         ordenDia = 3;
                     } else if (diaSemana === 0) { 
