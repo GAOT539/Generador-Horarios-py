@@ -1,122 +1,263 @@
 {% extends "base.html" %}
 
 {% block content %}
-<div id="app">
-    <h2 class="mb-4">📊 Reportes y Exportación</h2>
+<div id="app-reportes">
+    <h2 class="text-primary fw-bold mb-4 no-print">📊 Reportes y Estadísticas</h2>
 
-    <div class="card shadow mb-5">
-        <div class="card-header bg-dark text-white d-flex justify-content-between align-items-center">
-            <h5 class="mb-0">Auditoría de Profesores</h5>
-            <button @click="imprimirReporteGeneral" class="btn btn-sm btn-light">🖨️ Imprimir Reporte</button>
-        </div>
-        <div class="card-body">
-            <div class="row mb-3">
-                <div class="col-md-4">
-                    <div class="alert alert-primary text-center">
-                        <h3>[[ resumen.total_clases_semanales ]]</h3>
-                        <small>Bloques de Clases Asignados</small>
-                    </div>
-                </div>
-                <div class="col-md-4">
-                    <div class="alert alert-success text-center">
-                        <h3>[[ resumen.total_profesores ]]</h3>
-                        <small>Profesores Totales</small>
-                    </div>
-                </div>
-                <div class="col-md-4">
-                    <div class="alert" :class="resumen.profesores_sin_carga > 0 ? 'alert-danger' : 'alert-secondary'">
-                        <h3 class="text-center">[[ resumen.profesores_sin_carga ]]</h3>
-                        <small class="d-block text-center">Profesores sin Carga</small>
-                    </div>
-                </div>
-            </div>
+    <div class="print-header text-center mb-4" :class="{ 'd-none': isPrintingIndividual }">
+        <h1 class="fw-bold">HORARIOS ACADÉMICOS</h1>
+        <p class="text-muted">Centro de Idiomas</p>
+        <hr>
+    </div>
 
-            <div class="table-responsive">
-                <table class="table table-bordered table-hover align-middle">
-                    <thead class="table-light">
-                        <tr>
-                            <th>Profesor</th>
-                            <th class="text-center">Horas Reales / Máx</th>
-                            <th>Ocupación</th>
-                            <th class="text-center">Estado</th>
-                        </tr>
-                    </thead>
-                    <tbody>
-                        <tr v-for="p in reporte_profesores" :key="p.id">
-                            <td class="fw-bold">[[ p.nombre ]]</td>
-                            <td class="text-center">
-                                <span class="badge bg-primary fs-6">[[ p.horas_asignadas ]] hrs</span>
-                                <span class="text-muted mx-2">de</span>
-                                <span>[[ p.horas_maximas ]] hrs</span>
-                            </td>
-                            <td>
-                                <div class="progress" style="height: 20px;">
-                                    <div class="progress-bar" 
-                                         :class="getColorBarra(p.porcentaje)"
-                                         role="progressbar" 
-                                         :style="{width: p.porcentaje + '%'}">
-                                        [[ p.porcentaje ]]%
+    <ul class="nav nav-tabs mb-4 no-print" id="reportTabs" role="tablist">
+        <li class="nav-item">
+            <button class="nav-link active" id="general-tab" data-bs-toggle="tab" data-bs-target="#general" type="button">
+                📑 Reporte General
+            </button>
+        </li>
+        <li class="nav-item">
+            <button class="nav-link" id="stats-tab" data-bs-toggle="tab" data-bs-target="#stats" type="button">
+                📈 Estadísticas Docentes
+            </button>
+        </li>
+        <li class="nav-item">
+            <button class="nav-link" id="individual-tab" data-bs-toggle="tab" data-bs-target="#individual" type="button">
+                👤 Horario Individual
+            </button>
+        </li>
+    </ul>
+
+    <div class="tab-content" id="reportTabsContent">
+        
+        <div class="tab-pane fade show active" id="general" role="tabpanel">
+            <div class="card shadow-sm border-0">
+                <div class="card-body p-4">
+                    <div class="d-flex justify-content-between align-items-center mb-3 no-print">
+                        <h5 class="card-title fw-bold">Oferta Académica Resumida</h5>
+                        <button class="btn btn-outline-primary btn-sm" @click="imprimirGeneral">🖨️ Imprimir Reporte</button>
+                    </div>
+
+                    <div v-if="loading" class="text-center py-5 no-print">
+                        <div class="spinner-border text-primary" role="status"></div>
+                    </div>
+
+                    <div v-else>
+                        <div v-for="(gruposModalidad, idioma) in reporteGeneralData" :key="idioma" class="mb-5 section-break">
+                            <h3 class="text-uppercase fw-bold text-dark border-bottom border-3 pb-2 mb-4" style="border-color: #0d6efd !important;">
+                                📘 [[ idioma ]]
+                            </h3>
+
+                            <div v-for="(niveles, modalidad) in gruposModalidad" :key="modalidad" class="mb-4 ms-2">
+                                <div class="p-2 mb-3 bg-light border-start border-4 border-primary modal-header-print">
+                                    <h5 class="fw-bold text-primary m-0 text-uppercase">
+                                        MODALIDAD [[ modalidad ]]
+                                    </h5>
+                                </div>
+
+                                <div v-for="(horarios, nivelNum) in niveles" :key="nivelNum" class="mb-4 ms-3">
+                                    <h6 class="fw-bold text-secondary text-uppercase mb-2">
+                                        [[ getNivelLabel(nivelNum) ]]
+                                    </h6>
+                                    
+                                    <div class="table-responsive">
+                                        <table class="table table-sm table-hover table-print">
+                                            <tbody>
+                                                <tr v-for="(info, horarioKey) in horarios" :key="horarioKey">
+                                                    <td class="w-75 ps-3">
+                                                        <span class="fw-bold text-dark">Horario:</span> [[ info.texto ]]
+                                                    </td>
+                                                    <td class="w-25 text-end pe-3">
+                                                        <span class="badge bg-white text-dark border border-secondary rounded-pill">
+                                                            # Paralelos: [[ info.cantidad ]]
+                                                        </span>
+                                                    </td>
+                                                </tr>
+                                            </tbody>
+                                        </table>
                                     </div>
                                 </div>
-                            </td>
-                            <td class="text-center">
-                                <span v-if="p.estado == 'SIN_CARGA'" class="badge bg-danger">Sin Asignación ⚠️</span>
-                                <span v-else-if="p.estado == 'SUBUTILIZADO'" class="badge bg-warning text-dark">Baja Carga</span>
-                                <span v-else class="badge bg-success">Óptimo</span>
-                            </td>
-                        </tr>
-                    </tbody>
-                </table>
+                            </div>
+                        </div>
+
+                        <div v-if="Object.keys(reporteGeneralData).length === 0" class="alert alert-warning no-print">
+                            No hay horarios generados aún.
+                        </div>
+                    </div>
+                </div>
             </div>
         </div>
-    </div>
 
-    <div class="row">
-        <div class="col-md-6">
-            <div class="card shadow h-100 border-primary">
-                <div class="card-header bg-primary text-white">
-                    <h5 class="mb-0">👤 Horario Individual</h5>
+        <div class="tab-pane fade" id="stats" role="tabpanel">
+            <div class="row">
+                <div class="col-md-12 mb-4">
+                    <div class="card shadow-sm">
+                        <div class="card-body">
+                            <h5 class="card-title">Carga Horaria por Profesor</h5>
+                            <div v-for="p in estadisticas.profesores" :key="p.id" class="mb-3">
+                                <div class="d-flex justify-content-between mb-1">
+                                    <span class="fw-bold">[[ p.nombre ]]</span>
+                                    <span :class="getEstadoClass(p.estado)">
+                                        [[ p.horas_asignadas ]] / [[ p.horas_maximas ]] hrs ([[ p.estado ]])
+                                    </span>
+                                </div>
+                                <div class="progress">
+                                    <div class="progress-bar" role="progressbar" 
+                                         :style="{ width: p.porcentaje + '%', backgroundColor: getColorBarra(p.estado) }">
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
                 </div>
+            </div>
+        </div>
+
+        <div class="tab-pane fade" id="individual" role="tabpanel">
+            <div class="card shadow-sm border-0">
                 <div class="card-body">
-                    <p class="text-muted">Genera un PDF con el horario detallado de un solo docente.</p>
-                    <label>Seleccionar Profesor:</label>
-                    <select v-model="profeSeleccionado" class="form-select mb-3">
-                        <option value="">-- Elige uno --</option>
-                        <option v-for="p in reporte_profesores" :value="p.id">[[ p.nombre ]]</option>
-                    </select>
-                    <button @click="imprimirHorarioProfesor" class="btn btn-primary w-100" :disabled="!profeSeleccionado">
-                        📄 Generar PDF Profesor
-                    </button>
+                    <div class="row no-print mb-3 bg-light p-3 rounded mx-0">
+                        <div class="col-md-6">
+                            <label class="form-label fw-bold">Seleccionar Profesor:</label>
+                            <select v-model="profesorSeleccionado" class="form-select shadow-sm">
+                                <option :value="null">-- Seleccione --</option>
+                                <option v-for="p in profesores_list" :value="p.id">[[ p.nombre ]]</option>
+                            </select>
+                        </div>
+                        <div class="col-md-6 d-flex align-items-end">
+                            <button class="btn btn-primary w-100 shadow-sm" @click="imprimirIndividual" :disabled="!profesorSeleccionado || !tieneClases">
+                                🖨️ Descargar PDF Individual
+                            </button>
+                        </div>
+                    </div>
+
+                    <div v-if="profesorSeleccionado && tieneClases" id="print-area-individual">
+                        <div class="text-center mb-2">
+                            <h6 class="text-uppercase text-muted ls-2 mb-1">Horario Individual de Clases</h6>
+                            <h3 class="fw-bold text-uppercase">[[ getNombreProfesor(profesorSeleccionado) ]]</h3>
+                            <hr class="w-25 mx-auto my-2">
+                        </div>
+                        
+                        <div class="table-responsive">
+                            <table class="table table-bordered text-center align-middle table-individual-print">
+                                <thead class="bg-primary text-white">
+                                    <tr>
+                                        <th style="width: 10%;">HORA</th>
+                                        <th style="width: 20%;">LUNES</th>
+                                        <th style="width: 20%;">MARTES</th>
+                                        <th style="width: 20%;">MIÉRCOLES</th>
+                                        <th style="width: 20%;">JUEVES</th>
+                                        <th style="width: 10%;" class="bg-secondary">SÁB / DOM</th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    <tr v-for="hora in [7,8,9,10,11,12,13,14,15,16,17,18,19,20,21]" :key="hora">
+                                        <td class="fw-bold bg-light">[[ hora ]]:00 - [[ hora + 1 ]]:00</td>
+                                        
+                                        <td v-for="dia in [0,1,2,3]" :key="dia">
+                                            <div v-if="getClaseEnHora(dia, hora)">
+                                                <div class="clase-box presencial">
+                                                    <strong>[[ getClaseEnHora(dia, hora).materia ]]</strong><br>
+                                                    <span class="small">[[ getClaseEnHora(dia, hora).curso ]]</span><br>
+                                                    <span class="badge-mod">[[ getClaseEnHora(dia, hora).modalidad ]]</span>
+                                                </div>
+                                            </div>
+                                        </td>
+                                        
+                                        <td class="bg-light">
+                                            <div v-if="getClaseEnHora(5, hora)" class="mb-1">
+                                                <div class="clase-box online">
+                                                    <span class="badge bg-dark fw-normal" style="font-size: 0.5rem;">SÁB</span> 
+                                                    <strong>[[ getClaseEnHora(5, hora).materia ]]</strong>
+                                                    <span class="small">([[ getClaseEnHora(5, hora).curso ]])</span>
+                                                </div>
+                                            </div>
+                                            <div v-if="getClaseEnHora(6, hora)">
+                                                <div class="clase-box online">
+                                                    <span class="badge bg-dark fw-normal" style="font-size: 0.5rem;">DOM</span>
+                                                    <strong>[[ getClaseEnHora(6, hora).materia ]]</strong>
+                                                    <span class="small">([[ getClaseEnHora(6, hora).curso ]])</span>
+                                                </div>
+                                            </div>
+                                        </td>
+                                    </tr>
+                                </tbody>
+                            </table>
+                        </div>
+                    </div>
+                    
+                    <div v-else-if="profesorSeleccionado && !tieneClases" class="alert alert-info mt-5 text-center p-5 no-print">
+                        <h4>ℹ️ Sin Asignaciones</h4>
+                        <p>El profesor seleccionado no tiene clases asignadas en el horario actual.</p>
+                    </div>
                 </div>
             </div>
         </div>
 
-        <div class="col-md-6">
-            <div class="card shadow h-100 border-success">
-                <div class="card-header bg-success text-white">
-                    <h5 class="mb-0">🎓 Horario por Nivel</h5>
-                </div>
-                <div class="card-body">
-                    <p class="text-muted">Genera un PDF con todos los cursos de un nivel (Ej: Todos los de Nivel 1).</p>
-                    <label>Seleccionar Nivel:</label>
-                    <select v-model="nivelSeleccionado" class="form-select mb-3">
-                        <option value="">-- Elige Nivel --</option>
-                        <option value="1">Nivel 1</option>
-                        <option value="2">Nivel 2</option>
-                        <option value="3">Nivel 3</option>
-                        <option value="4">Nivel 4</option>
-                    </select>
-                    <button @click="imprimirHorarioNivel" class="btn btn-success w-100" :disabled="!nivelSeleccionado">
-                        📄 Generar PDF Nivel
-                    </button>
-                </div>
-            </div>
-        </div>
     </div>
-
 </div>
 
-<div id="print-area" class="d-none"></div>
+<style>
+    /* Estilos Generales Pantalla */
+    .ls-2 { letter-spacing: 2px; }
+    .clase-box {
+        padding: 4px;
+        border-radius: 4px;
+        font-size: 0.85rem;
+        margin-bottom: 2px;
+    }
+    .clase-box.presencial { background-color: #e3f2fd; color: #0d6efd; border-left: 3px solid #0d6efd; }
+    .clase-box.online { background-color: #fff3cd; color: #856404; border-left: 3px solid #ffc107; }
+    .badge-mod { font-size: 0.65rem; text-transform: uppercase; opacity: 0.8; }
+
+    /* ESTILOS DE IMPRESIÓN (PDF) */
+    .print-header { display: none; } /* Oculto en pantalla */
+
+    @media print {
+        @page { margin: 0.5cm; size: A4; } /* Márgenes mínimos para ajustar */
+        body { background: white; -webkit-print-color-adjust: exact !important; print-color-adjust: exact !important; }
+        
+        .no-print, .nav, .btn, .sidebar, header, .sidebar-wrapper, .navbar { display: none !important; }
+        .print-header { display: block !important; margin-bottom: 10px; }
+        
+        /* Ocultar header global si estamos imprimiendo individual */
+        .print-header.d-none { display: none !important; }
+
+        .card { border: none !important; box-shadow: none !important; }
+        
+        /* ESTILOS COMPACTOS PARA INDIVIDUAL */
+        .table-individual-print th { 
+            background-color: #0d6efd !important; 
+            color: white !important; 
+            font-size: 0.6rem !important; 
+            padding: 2px !important;
+        }
+        .table-individual-print td { 
+            font-size: 0.6rem !important; 
+            padding: 1px !important; 
+            height: 25px; /* Altura forzada para compactar */
+        }
+        .clase-box { 
+            border: 1px solid #ccc; 
+            background: none !important; 
+            color: black !important; 
+            font-size: 0.55rem !important;
+            padding: 1px;
+            margin: 0;
+            line-height: 1.1;
+        }
+        .badge-mod { display: none; } /* Ocultar etiqueta modalidad para ahorrar espacio */
+        
+        /* Estilo Reporte General */
+        .section-break { page-break-inside: avoid; margin-bottom: 20px; }
+        .modal-header-print { background-color: #f8f9fa !important; border-left: 5px solid #000 !important; color: black !important; }
+        .table-print td { border-bottom: 1px solid #eee; padding: 4px 0; font-size: 0.8rem; }
+        h3 { color: black !important; border-bottom: 2px solid black !important; font-size: 1.2rem !important; }
+        
+        .tab-pane { display: block !important; opacity: 1 !important; visibility: visible !important; }
+        .tab-pane:not(.active) { display: none !important; }
+    }
+</style>
 
 <script>
     const { createApp } = Vue
@@ -125,143 +266,209 @@
         compilerOptions: { delimiters: ['[[', ']]'] },
         data() {
             return {
-                reporte_profesores: [],
-                resumen: {},
-                horarios_raw: [],
-                profeSeleccionado: '',
-                nivelSeleccionado: ''
+                loading: true,
+                estadisticas: { profesores: [] },
+                profesores_list: [],
+                materias_list: [],
+                allEvents: [],
+                profesorSeleccionado: null,
+                tieneClases: false,
+                reporteGeneralData: {},
+                isPrintingIndividual: false // Estado para controlar encabezado
             }
         },
         mounted() {
             this.cargarDatos();
         },
+        watch: {
+            profesorSeleccionado(newVal) {
+                if (!newVal) {
+                    this.tieneClases = false;
+                    return;
+                }
+                const tiene = this.allEvents.some(e => e.extendedProps.profesor_id === newVal);
+                this.tieneClases = tiene;
+            }
+        },
         methods: {
             async cargarDatos() {
-                // 1. Estadísticas
-                const resStats = await fetch('/api/estadisticas');
-                const dataStats = await resStats.json();
-                this.reporte_profesores = dataStats.profesores;
-                this.resumen = dataStats.resumen;
+                this.loading = true;
+                try {
+                    const [resStats, resProfes, resMaterias, resHorario] = await Promise.all([
+                        fetch('/api/estadisticas'),
+                        fetch('/api/profesores'),
+                        fetch('/api/materias'),
+                        fetch('/api/horario')
+                    ]);
+                    
+                    this.estadisticas = await resStats.json();
+                    this.profesores_list = await resProfes.json();
+                    this.materias_list = await resMaterias.json();
+                    this.allEvents = await resHorario.json();
+                    
+                    this.procesarReporteGeneral();
 
-                // 2. Horarios completos (para poder filtrar y generar PDFs)
-                const resHorario = await fetch('/api/horario');
-                this.horarios_raw = await resHorario.json();
+                } catch (e) { console.error(e); }
+                finally { this.loading = false; }
             },
 
-            getColorBarra(p) {
-                if(p < 30) return 'bg-warning text-dark';
-                if(p > 90) return 'bg-danger';
-                return 'bg-success';
-            },
+            procesarReporteGeneral() {
+                const agrupado = {};
 
-            // --- LÓGICA DE IMPRESIÓN (PDF) ---
-            printHTML(titulo, contenidoHTML) {
-                const printWindow = window.open('', '', 'height=600,width=1000');
-                printWindow.document.write('<html><head><title>' + titulo + '</title>');
-                printWindow.document.write(`
-                    <style>
-                        body { font-family: sans-serif; padding: 20px; }
-                        h1 { text-align: center; color: #333; margin-bottom: 5px; }
-                        h2 { text-align: center; color: #666; margin-top: 0; }
-                        table { width: 100%; border-collapse: collapse; margin-top: 20px; table-layout: fixed; }
-                        th, td { border: 1px solid #999; padding: 5px; text-align: center; font-size: 11px; word-wrap: break-word; }
-                        th { background-color: #eee; }
-                        .header { margin-bottom: 20px; border-bottom: 2px solid #333; padding-bottom: 10px; }
-                        /* Colores */
-                        .mat { background-color: #3788d8; color: white; } /* Azul Mañana */
-                        .vesp { background-color: #28a745; color: white; } /* Verde Tarde */
-                        .onl { background-color: #6f42c1; color: white; }  /* Morado Online */
-                    </style>
-                `);
-                printWindow.document.write('</head><body>');
-                printWindow.document.write(contenidoHTML);
-                printWindow.document.write('</body></html>');
-                printWindow.document.close();
-                printWindow.print();
-            },
+                this.allEvents.forEach(ev => {
+                    const props = ev.extendedProps;
+                    const matObj = this.materias_list.find(m => m.id === props.materia_id);
+                    const nombreMateria = matObj ? matObj.nombre : "Desconocido";
+                    const nivel = matObj ? matObj.nivel : 0;
+                    
+                    let modTexto = "PRESENCIAL";
+                    if (props.modalidad.includes('ONLINE')) modTexto = "EN LÍNEA";
+                    
+                    const fecha = new Date(ev.start);
+                    const diaSemana = fecha.getDay(); 
+                    
+                    const horaInicio = fecha.getHours();
+                    const horaFin = new Date(ev.end).getHours();
+                    const hIniStr = horaInicio.toString().padStart(2, '0') + ":00";
+                    const hFinStr = horaFin.toString().padStart(2, '0') + ":00";
+                    
+                    let textoHorario = "";
+                    let ordenDia = 0;
 
-            imprimirReporteGeneral() {
-                let html = `<h1>Reporte de Carga Docente</h1>`;
-                html += `<table><thead><tr><th>Profesor</th><th>Horas Asig.</th><th>Horas Max.</th><th>Estado</th></tr></thead><tbody>`;
-                this.reporte_profesores.forEach(p => {
-                    html += `<tr><td>${p.nombre}</td><td>${p.horas_asignadas}</td><td>${p.horas_maximas}</td><td>${p.estado}</td></tr>`;
+                    if (diaSemana >= 1 && diaSemana <= 4) { 
+                        textoHorario = `lunes a jueves ${hIniStr} - ${hFinStr}`;
+                        ordenDia = 1;
+                    } else if (diaSemana === 5) { 
+                        textoHorario = `viernes ${hIniStr} - ${hFinStr}`;
+                        ordenDia = 2;
+                    } else if (diaSemana === 6) { 
+                        textoHorario = `sábado ${hIniStr} a ${hFinStr}`;
+                        ordenDia = 3;
+                    } else if (diaSemana === 0) { 
+                        textoHorario = `domingo ${hIniStr} a ${hFinStr}`;
+                        ordenDia = 4;
+                    }
+
+                    if (!agrupado[nombreMateria]) agrupado[nombreMateria] = {};
+                    if (!agrupado[nombreMateria][modTexto]) agrupado[nombreMateria][modTexto] = {};
+                    if (!agrupado[nombreMateria][modTexto][nivel]) agrupado[nombreMateria][modTexto][nivel] = {};
+                    
+                    const keyHorario = `${ordenDia}_${textoHorario}`;
+
+                    if (!agrupado[nombreMateria][modTexto][nivel][keyHorario]) {
+                        agrupado[nombreMateria][modTexto][nivel][keyHorario] = new Set();
+                    }
+                    
+                    const match = ev.title.match(/\(([^)]+)\)/);
+                    const cursoLetra = match ? match[1] : "UNK";
+                    agrupado[nombreMateria][modTexto][nivel][keyHorario].add(cursoLetra);
                 });
-                html += `</tbody></table>`;
-                this.printHTML('Reporte General', html);
-            },
 
-            imprimirHorarioProfesor() {
-                const eventos = this.horarios_raw.filter(h => h.extendedProps.profesor_id == this.profeSeleccionado);
-                const nombreProfe = this.reporte_profesores.find(p => p.id == this.profeSeleccionado).nombre;
-
-                if(eventos.length === 0) {
-                    Swal.fire('Aviso', 'Este profesor no tiene horarios asignados.', 'warning');
-                    return;
-                }
-
-                let html = `<div class="header"><h1>Horario Individual</h1><h2>Profesor: ${nombreProfe}</h2></div>`;
-                html += this.generarTablaHorario(eventos);
-                this.printHTML(`Horario - ${nombreProfe}`, html);
-            },
-
-            imprimirHorarioNivel() {
-                const nivelStr = " " + this.nivelSeleccionado; 
-                const eventos = this.horarios_raw.filter(h => h.title.includes(nivelStr)); 
-
-                if(eventos.length === 0) {
-                    Swal.fire('Aviso', 'No hay clases para este nivel.', 'warning');
-                    return;
-                }
-
-                let html = `<div class="header"><h1>Horario Grupal</h1><h2>Nivel ${this.nivelSeleccionado}</h2></div>`;
-                html += this.generarTablaHorario(eventos);
-                this.printHTML(`Horario - Nivel ${this.nivelSeleccionado}`, html);
-            },
-
-            // Generador de tabla Lunes - Domingo
-            generarTablaHorario(eventos) {
-                // Todos los slots posibles (Mañana, Tarde, Noche)
-                const slots = [7, 9, 11, 13, 15, 17, 19];
-                const dias = ['Lunes', 'Martes', 'Miércoles', 'Jueves', 'Viernes', 'Sábado', 'Domingo'];
+                const resultadoFinal = {};
                 
-                // Mapeo fechas base a índices 0-6
-                const fechasMap = {
-                    '2023-11-20': 0, '2023-11-21': 1, '2023-11-22': 2, '2023-11-23': 3,
-                    '2023-11-24': 4, '2023-11-25': 5, '2023-11-26': 6
-                };
-
-                let table = `<table><thead><tr><th style="width: 80px;">Hora</th>`;
-                dias.forEach(d => table += `<th>${d}</th>`);
-                table += `</tr></thead><tbody>`;
-
-                slots.forEach(slot => {
-                    table += `<tr><td><strong>${slot}:00 - ${slot+2}:00</strong></td>`;
-                    dias.forEach((dia, index) => {
-                        // Buscar evento
-                        const evento = eventos.find(e => {
-                            const fecha = e.start.split('T')[0];
-                            const hora = parseInt(e.start.split('T')[1].split(':')[0]);
-                            return fechasMap[fecha] === index && hora === slot;
-                        });
-
-                        if (evento) {
-                            const contenido = evento.title.replace('\n', '<br>');
-                            // Determinar clase CSS según color
-                            let colorClass = 'mat';
-                            if (evento.color === '#28a745') colorClass = 'vesp';
-                            if (evento.color === '#6f42c1') colorClass = 'onl';
+                Object.keys(agrupado).sort().forEach(idioma => {
+                    resultadoFinal[idioma] = {};
+                    Object.keys(agrupado[idioma]).sort().forEach(mod => {
+                        resultadoFinal[idioma][mod] = {};
+                        Object.keys(agrupado[idioma][mod]).sort((a,b) => a-b).forEach(nivel => {
+                            const horariosObj = agrupado[idioma][mod][nivel];
+                            const listaHorarios = [];
                             
-                            table += `<td class="${colorClass}">${contenido}</td>`;
-                        } else {
-                            table += `<td>-</td>`;
-                        }
+                            Object.keys(horariosObj).sort().forEach(key => {
+                                const textoReal = key.split('_')[1]; 
+                                listaHorarios.push({
+                                    texto: textoReal,
+                                    cantidad: horariosObj[key].size 
+                                });
+                            });
+                            
+                            resultadoFinal[idioma][mod][nivel] = listaHorarios;
+                        });
                     });
-                    table += `</tr>`;
                 });
-                table += `</tbody></table>`;
-                return table;
+
+                this.reporteGeneralData = resultadoFinal;
+            },
+
+            getNivelLabel(nivel) {
+                const n = parseInt(nivel);
+                if (n === 1) return "Nivel 1: A1 – Principiante";
+                if (n === 2) return "Nivel 2: A2 – Elemental";
+                if (n === 3) return "Nivel 3: B1 – Pre-intermedio";
+                if (n === 4) return "Nivel 4: B1+ – Intermedio";
+                if (n === 5) return "Nivel 5: B2 – Intermedio Alto";
+                if (n >= 6) return `Nivel ${n}: Avanzado`;
+                return `Nivel ${n}`;
+            },
+
+            getEstadoClass(estado) {
+                if(estado === 'SIN_CARGA') return 'text-danger';
+                if(estado === 'SOBRECARGA') return 'text-warning';
+                return 'text-success';
+            },
+            getColorBarra(estado) {
+                if(estado === 'SIN_CARGA') return '#dc3545';
+                if(estado === 'SOBRECARGA') return '#ffc107';
+                return '#198754';
+            },
+
+            getNombreProfesor(id) {
+                const p = this.profesores_list.find(x => x.id === id);
+                return p ? p.nombre : '';
+            },
+
+            imprimirGeneral() {
+                this.isPrintingIndividual = false;
+                const originalTitle = document.title;
+                document.title = "Reporte_Horarios";
+                setTimeout(() => { window.print(); document.title = originalTitle; }, 100);
+            },
+            
+            imprimirIndividual() {
+                this.isPrintingIndividual = true; // Activa bandera para ocultar header global
+                const nombre = this.getNombreProfesor(this.profesorSeleccionado);
+                const nombreSafe = nombre.replace(/[^a-zA-Z0-9]/g, '_');
+                const originalTitle = document.title;
+                document.title = `Horario_${nombreSafe}`;
+                
+                // Esperar a que Vue actualice el DOM (oculte el header) antes de imprimir
+                this.$nextTick(() => {
+                    window.print();
+                    document.title = originalTitle;
+                    this.isPrintingIndividual = false; // Restaurar estado
+                });
+            },
+
+            getClaseEnHora(diaTarget, horaTarget) {
+                if (!this.profesorSeleccionado) return null;
+                
+                const eventosProfe = this.allEvents.filter(e => e.extendedProps.profesor_id === this.profesorSeleccionado);
+                
+                const clase = eventosProfe.find(ev => {
+                    const d = new Date(ev.start);
+                    let jsDay = d.getDay(); 
+                    let dbDay = jsDay === 0 ? 6 : jsDay - 1; 
+                    
+                    if (dbDay !== diaTarget) return false;
+                    
+                    const hStart = d.getHours();
+                    const hEnd = new Date(ev.end).getHours();
+                    
+                    // CORRECCIÓN: Verificar si la horaTarget está dentro del rango
+                    return horaTarget >= hStart && horaTarget < hEnd;
+                });
+
+                if (!clase) return null;
+
+                const lines = clase.title.split('\n');
+                return {
+                    materia: lines[0],
+                    profesor: lines[1],
+                    curso: clase.extendedProps.curso_turno,
+                    modalidad: clase.extendedProps.modalidad.includes('ONLINE') ? 'ONLINE' : 'PRESENCIAL'
+                };
             }
         }
-    }).mount('#app')
+    }).mount('#app-reportes')
 </script>
 {% endblock %}
