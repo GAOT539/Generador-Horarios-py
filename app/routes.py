@@ -1,7 +1,8 @@
-from flask import Blueprint, render_template, request, jsonify, Response
+from flask import Blueprint, render_template, request, jsonify, Response, current_app
 from app.models import Profesor, Materia, ProfesorMateria, db, Horario, Curso
 from app.engine.solver import generar_horario_automatico
 import json
+import traceback
 
 bp = Blueprint('main', __name__)
 
@@ -32,6 +33,7 @@ def manage_materias():
             )
             return jsonify({'status': 'ok'})
         except Exception as e:
+            current_app.logger.error(f"Error creando materia: {str(e)}")
             return jsonify({'error': str(e)}), 400
             
     if request.method == 'DELETE':
@@ -88,6 +90,7 @@ def create_profesor():
                 ProfesorMateria.create(profesor=p, materia_id=materia_id)
             return jsonify({'status': 'ok'})
         except Exception as e:
+            current_app.logger.error(f"Error creando profesor: {str(e)}")
             return jsonify({'error': str(e)}), 400
 
 @bp.route('/api/profesores/<int:id>', methods=['PUT'])
@@ -98,6 +101,7 @@ def update_profesor(id):
         query.execute()
         return jsonify({'status': 'ok'})
     except Exception as e:
+        current_app.logger.error(f"Error actualizando profesor {id}: {str(e)}")
         return jsonify({'error': str(e)}), 400
 
 @bp.route('/api/profesores/<int:id>', methods=['DELETE'])
@@ -109,6 +113,7 @@ def delete_profesor(id):
             Profesor.delete().where(Profesor.id == id).execute()
         return jsonify({'status': 'ok'})
     except Exception as e:
+        current_app.logger.error(f"Error eliminando profesor {id}: {str(e)}")
         return jsonify({'error': f"Error al borrar: {str(e)}"}), 400
 
 # --- API CURSOS ---
@@ -137,11 +142,21 @@ def manage_cursos():
 # --- API GENERACIÓN ---
 @bp.route('/api/generar', methods=['POST'])
 def generar():
-    resultado = generar_horario_automatico()
-    if resultado['status'] == 'ok':
-        return jsonify(resultado)
-    else:
-        return jsonify(resultado), 400
+    current_app.logger.info("Solicitud de generación de horario recibida.")
+    try:
+        resultado = generar_horario_automatico()
+        
+        if resultado['status'] == 'ok':
+            current_app.logger.info("Horario generado exitosamente.")
+            return jsonify(resultado)
+        else:
+            current_app.logger.warning(f"Fallo en generación: {resultado['message']}")
+            return jsonify(resultado), 400
+            
+    except Exception as e:
+        err_msg = f"Error no controlado en ruta /api/generar: {str(e)}"
+        current_app.logger.critical(err_msg + "\n" + traceback.format_exc())
+        return jsonify({"status": "error", "message": "Error interno del servidor. Revise logs."}), 500
 
 # --- API LEER HORARIO ---
 @bp.route('/api/horario', methods=['GET'])
@@ -232,7 +247,6 @@ def get_estadisticas():
         })
 
     # 2. Análisis Avanzado (Cursos Únicos)
-    # Agrupar horarios por Curso ID para no contar bloques individuales como cursos distintos
     cursos_unicos_query = (Horario
                            .select(Horario.curso, Curso.modalidad, Curso.turno, Materia.nombre)
                            .join(Curso, on=(Horario.curso == Curso.id))
@@ -245,26 +259,21 @@ def get_estadisticas():
     stats_materias = {}
 
     for entry in cursos_unicos_query:
-        # Modalidad
         mod = entry.curso.modalidad
         if mod in stats_modalidad:
             stats_modalidad[mod] += 1
         else:
-            # Fallback para modalidades antiguas si existieran
             stats_modalidad[mod] = 1
         
-        # Turno
         turno = entry.curso.turno
         if turno in stats_turno:
             stats_turno[turno] += 1
         else:
             stats_turno[turno] = 1
             
-        # Materia
         mat_nombre = entry.materia.nombre
         stats_materias[mat_nombre] = stats_materias.get(mat_nombre, 0) + 1
 
-    # Top 5 Materias
     top_materias = sorted(stats_materias.items(), key=lambda x: x[1], reverse=True)[:5]
 
     return jsonify({
@@ -283,25 +292,29 @@ def get_estadisticas():
 # --- BACKUP ---
 @bp.route('/api/backup', methods=['GET'])
 def backup_data():
-    materias = list(Materia.select().dicts())
-    profesores_data = []
-    for p in Profesor.select():
-        competencias = [f"{pm.materia.nombre}|{pm.materia.nivel}" for pm in p.competencias]
-        profesores_data.append({
-            'nombre': p.nombre,
-            'max_horas_semana': p.max_horas_semana,
-            'max_horas_dia': p.max_horas_dia,
-            'competencias': competencias
-        })
+    try:
+        materias = list(Materia.select().dicts())
+        profesores_data = []
+        for p in Profesor.select():
+            competencias = [f"{pm.materia.nombre}|{pm.materia.nivel}" for pm in p.competencias]
+            profesores_data.append({
+                'nombre': p.nombre,
+                'max_horas_semana': p.max_horas_semana,
+                'max_horas_dia': p.max_horas_dia,
+                'competencias': competencias
+            })
 
-    backup = {
-        'system_signature': 'GENERADOR_HORARIOS_V1',
-        'materias': materias,
-        'profesores': profesores_data
-    }
-    
-    return Response(json.dumps(backup, indent=2), mimetype="application/json",
-        headers={"Content-disposition": "attachment; filename=respaldo_configuracion.json"})
+        backup = {
+            'system_signature': 'GENERADOR_HORARIOS_V1',
+            'materias': materias,
+            'profesores': profesores_data
+        }
+        
+        return Response(json.dumps(backup, indent=2), mimetype="application/json",
+            headers={"Content-disposition": "attachment; filename=respaldo_configuracion.json"})
+    except Exception as e:
+        current_app.logger.error(f"Error generando backup: {str(e)}")
+        return jsonify({'error': str(e)}), 500
 
 @bp.route('/api/restore', methods=['POST'])
 def restore_data():
@@ -340,4 +353,6 @@ def restore_data():
                         ProfesorMateria.create(profesor=nuevo_profe, materia=materia_obj)
         
         return jsonify({'status': 'ok', 'message': 'Restaurado.'})
-    except Exception as e: return jsonify({'error': str(e)}), 500
+    except Exception as e:
+        current_app.logger.error(f"Error restaurando backup: {str(e)}")
+        return jsonify({'error': str(e)}), 500

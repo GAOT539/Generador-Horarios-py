@@ -316,6 +316,7 @@
                 this.calendar.render();
             },
 
+            // --- LÓGICA MODIFICADA PARA MOSTRAR ERRORES ESPECÍFICOS ---
             async generarHorario() {
                 const confirm = await Swal.fire({
                     title: '¿Generar nuevo horario?',
@@ -328,11 +329,26 @@
                 if (confirm.isConfirmed) {
                     this.loading = true;
                     try {
-                        await fetch('/api/generar', {method: 'POST'});
+                        const res = await fetch('/api/generar', {method: 'POST'});
+                        const data = await res.json(); // Leer respuesta completa
+
+                        if (!res.ok) {
+                            // Si hay error (status 400/500), lanzar el mensaje que viene del backend
+                            throw new Error(data.message || "Error desconocido al generar.");
+                        }
+
+                        // Si todo bien
                         await this.cargarDatos(); 
-                        Swal.fire('¡Éxito!', 'Horario generado', 'success');
+                        Swal.fire('¡Éxito!', data.message || 'Horario generado', 'success');
+
                     } catch (e) {
-                        Swal.fire('Error', 'Fallo de conexión', 'error');
+                        // Mostrar mensaje de error específico en pantalla
+                        Swal.fire({
+                            title: 'Error de Generación',
+                            text: e.message, // Aquí se verá: "No existen profesores asignados..."
+                            icon: 'error',
+                            confirmButtonText: 'Entendido'
+                        });
                     } finally {
                         this.loading = false;
                     }
