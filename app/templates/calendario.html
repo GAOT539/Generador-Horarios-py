@@ -1,0 +1,328 @@
+{% extends "base.html" %}
+
+{% block content %}
+<link rel="stylesheet" href="https://unpkg.com/tippy.js@6/animations/scale.css"/>
+<style>
+    .sidebar-filtros {
+        width: 300px;
+        background-color: #f8f9fa;
+        transition: margin-right 0.3s ease-in-out;
+        margin-right: -300px;
+        min-width: 300px;
+    }
+    .sidebar-filtros.open {
+        margin-right: 0;
+    }
+    .btn-outline-purple {
+        color: #6f42c1;
+        border-color: #6f42c1;
+    }
+    .btn-outline-purple:hover, .btn-check:checked + .btn-outline-purple {
+        background-color: #6f42c1;
+        color: white;
+    }
+    
+    .tippy-box[data-theme~='custom'] {
+        background-color: #343a40;
+        color: white;
+        font-size: 0.85rem;
+        border-radius: 6px;
+        text-align: left;
+    }
+    .tooltip-header {
+        border-bottom: 1px solid rgba(255,255,255,0.2);
+        padding-bottom: 4px;
+        margin-bottom: 4px;
+        font-weight: bold;
+        color: #ffc107;
+    }
+</style>
+
+<div id="app" style="height: calc(100vh - 100px); display: flex; flex-direction: column;">
+    
+    <div class="d-flex justify-content-between align-items-center mb-3 px-1">
+        <div class="d-flex align-items-center">
+            <a href="/" class="btn btn-sm btn-outline-secondary me-3" title="Volver al inicio">
+                ⬅️ Inicio
+            </a>
+
+            <h2 class="text-primary fw-bold m-0 d-inline-block me-3">📅 Calendario</h2>
+            
+            <div class="btn-group" role="group">
+                <input type="radio" class="btn-check" name="modview" id="viewAll" value="ALL" v-model="vistaModalidad" @change="limpiarFiltrosSecundarios" checked>
+                <label class="btn btn-outline-primary" for="viewAll">Todos</label>
+
+                <input type="radio" class="btn-check" name="modview" id="viewReg" value="REGULAR" v-model="vistaModalidad" @change="limpiarFiltrosSecundarios">
+                <label class="btn btn-outline-success" for="viewReg">🏫 Presencial</label>
+
+                <input type="radio" class="btn-check" name="modview" id="viewOnl" value="ONLINE" v-model="vistaModalidad" @change="limpiarFiltrosSecundarios">
+                <label class="btn btn-outline-purple" for="viewOnl">💻 Online</label>
+            </div>
+        </div>
+        
+        <div class="d-flex gap-2">
+            <button class="btn btn-outline-secondary shadow-sm" @click="toggleSidebar">
+                <span v-if="sidebarOpen">Cerrar Filtros ❌</span>
+                <span v-else>Filtrar 🔍</span>
+            </button>
+        </div>
+    </div>
+
+    <div class="d-flex flex-grow-1 position-relative overflow-hidden shadow border rounded">
+        
+        <div class="flex-grow-1 p-3 bg-white" style="overflow-y: auto;">
+            <div id="calendar"></div>
+        </div>
+
+        <div class="sidebar-filtros bg-light border-start p-3" :class="{ 'open': sidebarOpen }">
+            <h5 class="mb-3 fw-bold text-secondary">🔍 Filtros Dinámicos</h5>
+            
+            <div class="mb-3">
+                <label class="form-label small fw-bold">Materia (General)</label>
+                <select v-model="filtros.materiaNombre" class="form-select shadow-sm" @change="filtros.materiaId = ''; aplicarFiltros()">
+                    <option value="">-- Todas --</option>
+                    <option v-for="nombre in materiasGeneralesDisponibles" :value="nombre">[[ nombre ]]</option>
+                </select>
+            </div>
+
+            <div class="mb-3">
+                <label class="form-label small fw-bold">Nivel / Curso</label>
+                <select v-model="filtros.materiaId" class="form-select shadow-sm" @change="aplicarFiltros">
+                    <option value="">-- Todos --</option>
+                    <option v-for="m in materiasEspecificasDisponibles" :value="m.id">[[ m.nombre ]] - Nivel [[ m.nivel ]]</option>
+                </select>
+            </div>
+
+            <div class="mb-3">
+                <label class="form-label small fw-bold">Profesor</label>
+                <select v-model="filtros.profesor" class="form-select shadow-sm" @change="aplicarFiltros">
+                    <option value="">-- Todos --</option>
+                    <option v-for="p in profesoresDisponibles" :value="p.id">[[ p.nombre ]]</option>
+                </select>
+            </div>
+
+            <hr>
+
+            <div class="d-grid">
+                <button class="btn btn-sm btn-outline-dark" @click="limpiarTodo">
+                    Limpiar Filtros 🗑️
+                </button>
+            </div>
+
+            <div class="mt-4 alert alert-info small">
+                <i class="fas fa-info-circle"></i> 
+                Mostrando <strong>[[ eventosVisibles ]]</strong> clases.
+            </div>
+        </div>
+
+    </div>
+</div>
+
+<script src='https://cdn.jsdelivr.net/npm/fullcalendar@6.1.10/index.global.min.js'></script>
+<script src="https://unpkg.com/@popperjs/core@2"></script>
+<script src="https://unpkg.com/tippy.js@6"></script>
+
+<script>
+    const { createApp } = Vue
+
+    createApp({
+        compilerOptions: { delimiters: ['[[', ']]'] },
+        data() {
+            return {
+                sidebarOpen: false, 
+                calendar: null,
+                allEvents: [],      
+                materias_db: [],    
+                profesores_db: [],  
+                vistaModalidad: 'ALL',
+                filtros: {
+                    materiaNombre: '',
+                    materiaId: '',
+                    profesor: ''
+                },
+                eventosVisibles: 0
+            }
+        },
+        computed: {
+            eventosBaseModalidad() {
+                if (this.vistaModalidad === 'ALL') return this.allEvents;
+                return this.allEvents.filter(e => {
+                    if (this.vistaModalidad === 'REGULAR') return e.extendedProps.modalidad === 'REGULAR';
+                    if (this.vistaModalidad === 'ONLINE') return e.extendedProps.modalidad.includes('ONLINE');
+                    return true;
+                });
+            },
+            materiasGeneralesDisponibles() {
+                const idsPresentes = new Set(this.eventosBaseModalidad.map(e => e.extendedProps.materia_id));
+                const materiasActivas = this.materias_db.filter(m => idsPresentes.has(m.id));
+                return [...new Set(materiasActivas.map(m => m.nombre))].sort();
+            },
+            materiasEspecificasDisponibles() {
+                const idsPresentes = new Set(this.eventosBaseModalidad.map(e => e.extendedProps.materia_id));
+                let filtradas = this.materias_db.filter(m => idsPresentes.has(m.id));
+                if (this.filtros.materiaNombre) {
+                    filtradas = filtradas.filter(m => m.nombre === this.filtros.materiaNombre);
+                }
+                return filtradas.sort((a,b) => a.nivel - b.nivel);
+            },
+            profesoresDisponibles() {
+                let eventosCandidatos = this.eventosBaseModalidad;
+                if (this.filtros.materiaNombre) {
+                    const idsMatName = this.materias_db.filter(m => m.nombre === this.filtros.materiaNombre).map(m => m.id);
+                    eventosCandidatos = eventosCandidatos.filter(e => idsMatName.includes(e.extendedProps.materia_id));
+                }
+                if (this.filtros.materiaId) {
+                    eventosCandidatos = eventosCandidatos.filter(e => e.extendedProps.materia_id === this.filtros.materiaId);
+                }
+                const idsProfes = new Set(eventosCandidatos.map(e => e.extendedProps.profesor_id));
+                return this.profesores_db.filter(p => idsProfes.has(p.id));
+            }
+        },
+        mounted() {
+            this.iniciarCalendario();
+            this.cargarDatos();
+        },
+        methods: {
+            toggleSidebar() {
+                this.sidebarOpen = !this.sidebarOpen;
+                setTimeout(() => { this.calendar.updateSize(); }, 310);
+            },
+            
+            async cargarDatos() {
+                try {
+                    this.materias_db = await (await fetch('/api/materias')).json();
+                    this.profesores_db = await (await fetch('/api/profesores')).json();
+                    const res = await fetch('/api/horario');
+                    this.allEvents = await res.json();
+                    this.aplicarFiltros();
+                } catch (e) { console.error("Error cargando datos", e); }
+            },
+
+            limpiarFiltrosSecundarios() {
+                this.filtros.materiaNombre = '';
+                this.filtros.materiaId = '';
+                this.filtros.profesor = '';
+                this.aplicarFiltros();
+            },
+
+            limpiarTodo() {
+                this.vistaModalidad = 'ALL';
+                this.limpiarFiltrosSecundarios();
+            },
+
+            aplicarFiltros() {
+                const filtrados = this.eventosBaseModalidad.filter(e => {
+                    if (this.filtros.materiaNombre) {
+                        const m = this.materias_db.find(x => x.id === e.extendedProps.materia_id);
+                        if (!m || m.nombre !== this.filtros.materiaNombre) return false;
+                    }
+                    if (this.filtros.materiaId && e.extendedProps.materia_id !== this.filtros.materiaId) return false;
+                    if (this.filtros.profesor && e.extendedProps.profesor_id !== this.filtros.profesor) return false;
+                    return true;
+                });
+
+                this.eventosVisibles = filtrados.length;
+                if (this.calendar) {
+                    this.calendar.removeAllEvents();
+                    this.calendar.addEventSource(filtrados);
+                }
+            },
+
+            iniciarCalendario() {
+                var calendarEl = document.getElementById('calendar');
+                this.calendar = new FullCalendar.Calendar(calendarEl, {
+                    initialView: 'timeGridWeek',
+                    locale: 'es',
+                    firstDay: 1, 
+                    initialDate: '2023-11-20',
+                    validRange: {
+                        start: '2023-11-20',
+                        end: '2023-11-27' 
+                    },
+                    headerToolbar: {
+                        left: '', 
+                        center: '', 
+                        right: 'timeGridWeek,timeGridDay,listWeek' 
+                    },
+                    dayHeaderFormat: { weekday: 'long' },
+                    listDayFormat: { weekday: 'long' }, 
+                    listDaySideFormat: false,           
+                    dayMaxEvents: true, 
+                    hiddenDays: [], 
+                    slotMinTime: '07:00:00',
+                    slotMaxTime: '22:00:00',
+                    allDaySlot: false,
+                    expandRows: true,
+                    height: '100%',
+                    eventColor: '#3788d8',
+
+                    eventDidMount: function(info) {
+                        const ev = info.event;
+                        const props = ev.extendedProps;
+                        const lineas = ev.title.split('\n');
+                        const lineaMateria = lineas[0] || 'Clase';
+                        const lineaProfe = lineas[1] || 'Sin profesor';
+                        const startTime = ev.start.toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'});
+                        const endTime = ev.end.toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'});
+
+                        const tooltipContent = `
+                            <div class="tooltip-header">${lineaMateria}</div>
+                            <div><strong>👨‍🏫 Profe:</strong> ${lineaProfe}</div>
+                            <div><strong>⏰ Hora:</strong> ${startTime} - ${endTime}</div>
+                            <div class="mt-1"><span class="badge bg-light text-dark">${props.modalidad}</span></div>
+                        `;
+
+                        tippy(info.el, {
+                            content: tooltipContent,
+                            allowHTML: true,
+                            theme: 'custom',
+                            animation: 'scale',
+                            placement: 'top',
+                        });
+                    }
+                });
+                this.calendar.render();
+            },
+
+            // --- LÓGICA MODIFICADA PARA MOSTRAR ERRORES ESPECÍFICOS ---
+            async generarHorario() {
+                const confirm = await Swal.fire({
+                    title: '¿Generar nuevo horario?',
+                    text: "Se borrará el horario actual.",
+                    icon: 'warning',
+                    showCancelButton: true,
+                    confirmButtonText: 'Sí, generar'
+                });
+
+                if (confirm.isConfirmed) {
+                    this.loading = true;
+                    try {
+                        const res = await fetch('/api/generar', {method: 'POST'});
+                        const data = await res.json(); // Leer respuesta completa
+
+                        if (!res.ok) {
+                            // Si hay error (status 400/500), lanzar el mensaje que viene del backend
+                            throw new Error(data.message || "Error desconocido al generar.");
+                        }
+
+                        // Si todo bien
+                        await this.cargarDatos(); 
+                        Swal.fire('¡Éxito!', data.message || 'Horario generado', 'success');
+
+                    } catch (e) {
+                        // Mostrar mensaje de error específico en pantalla
+                        Swal.fire({
+                            title: 'Error de Generación',
+                            text: e.message, // Aquí se verá: "No existen profesores asignados..."
+                            icon: 'error',
+                            confirmButtonText: 'Entendido'
+                        });
+                    } finally {
+                        this.loading = false;
+                    }
+                }
+            }
+        }
+    }).mount('#app')
+</script>
+{% endblock %}

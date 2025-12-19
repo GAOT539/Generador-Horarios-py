@@ -10,6 +10,11 @@ bp = Blueprint('main', __name__)
 def index():
     return render_template('index.html')
 
+# --- NUEVA RUTA ---
+@bp.route('/calendario')
+def calendario():
+    return render_template('calendario.html')
+
 @bp.route('/config')
 def config():
     return render_template('config.html')
@@ -17,6 +22,10 @@ def config():
 @bp.route('/reportes')
 def reportes():
     return render_template('reportes.html')
+
+# ... (El resto del archivo routes.py se mantiene EXACTAMENTE IGUAL) ...
+# ... (API Materias, API Profesores, API Cursos, API Generar, etc.) ...
+# ... Asegúrate de mantener todo el código de las APIs que ya tenías ...
 
 # --- API MATERIAS ---
 @bp.route('/api/materias', methods=['GET', 'POST', 'DELETE'])
