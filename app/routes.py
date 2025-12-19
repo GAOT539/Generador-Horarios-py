@@ -179,8 +179,6 @@ def get_horario():
             else:
                 color = '#3788d8' # Azul Mañana
 
-        # Formato Solicitado:
-        # [ON]Materia - Nivel (curso) Profesor
         tag_str = f"{mod_tag} " if mod_tag else ""
         titulo = f"{tag_str}{h.materia.nombre} - {h.materia.nivel} ({h.curso.nombre})\n{h.profesor.nombre}"
         
@@ -193,7 +191,8 @@ def get_horario():
                 'materia_id': h.materia.id,
                 'profesor_id': h.profesor.id,
                 'curso_turno': h.curso.turno,
-                'modalidad': h.curso.modalidad
+                'modalidad': h.curso.modalidad,
+                'curso_nombre': h.curso.nombre
             }
         })
         
@@ -202,23 +201,23 @@ def get_horario():
 # --- API ESTADISTICAS ---
 @bp.route('/api/estadisticas', methods=['GET'])
 def get_estadisticas():
-    conteo_bloques = {}
+    # 1. Datos base de profesores
     asignaciones = Horario.select()
-    
-    for h in asignaciones:
-        p_id = h.profesor.id
-        if p_id not in conteo_bloques: conteo_bloques[p_id] = 0
-        conteo_bloques[p_id] += 1
-
     profesores = Profesor.select()
     reporte = []
     
+    total_capacidad_horas = 0
+    total_horas_asignadas = 0
+
     for p in profesores:
         horas_reales = 0
         mis_horarios = [x for x in asignaciones if x.profesor.id == p.id]
         for mh in mis_horarios:
             duracion = mh.hora_fin - mh.hora_inicio
             horas_reales += duracion
+
+        total_capacidad_horas += p.max_horas_semana
+        total_horas_asignadas += horas_reales
 
         estado = "OK"
         if horas_reales == 0: estado = "SIN_CARGA"
@@ -232,12 +231,52 @@ def get_estadisticas():
             'porcentaje': round((horas_reales / p.max_horas_semana) * 100, 1) if p.max_horas_semana > 0 else 0
         })
 
+    # 2. Análisis Avanzado (Cursos Únicos)
+    # Agrupar horarios por Curso ID para no contar bloques individuales como cursos distintos
+    cursos_unicos_query = (Horario
+                           .select(Horario.curso, Curso.modalidad, Curso.turno, Materia.nombre)
+                           .join(Curso, on=(Horario.curso == Curso.id))
+                           .switch(Horario)
+                           .join(Materia, on=(Horario.materia == Materia.id))
+                           .group_by(Horario.curso, Curso.modalidad, Curso.turno, Materia.nombre))
+
+    stats_modalidad = {'REGULAR': 0, 'ONLINE_LJ': 0, 'ONLINE_FDS': 0}
+    stats_turno = {'Matutino': 0, 'Vespertino': 0, 'Nocturno': 0, 'FDS': 0}
+    stats_materias = {}
+
+    for entry in cursos_unicos_query:
+        # Modalidad
+        mod = entry.curso.modalidad
+        if mod in stats_modalidad:
+            stats_modalidad[mod] += 1
+        else:
+            # Fallback para modalidades antiguas si existieran
+            stats_modalidad[mod] = 1
+        
+        # Turno
+        turno = entry.curso.turno
+        if turno in stats_turno:
+            stats_turno[turno] += 1
+        else:
+            stats_turno[turno] = 1
+            
+        # Materia
+        mat_nombre = entry.materia.nombre
+        stats_materias[mat_nombre] = stats_materias.get(mat_nombre, 0) + 1
+
+    # Top 5 Materias
+    top_materias = sorted(stats_materias.items(), key=lambda x: x[1], reverse=True)[:5]
+
     return jsonify({
         'profesores': reporte,
         'resumen': {
             'total_profesores': len(profesores),
-            'total_clases_semanales': len(asignaciones),
-            'profesores_sin_carga': len([x for x in reporte if x['estado'] == 'SIN_CARGA'])
+            'total_materias': len(stats_materias),
+            'total_cursos': cursos_unicos_query.count(),
+            'ocupacion_global_pct': round((total_horas_asignadas / total_capacidad_horas * 100), 1) if total_capacidad_horas > 0 else 0,
+            'distribucion_modalidad': stats_modalidad,
+            'distribucion_turno': stats_turno,
+            'top_materias': top_materias
         }
     })
 

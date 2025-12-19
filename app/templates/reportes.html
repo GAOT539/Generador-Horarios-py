@@ -12,11 +12,6 @@
 
     <ul class="nav nav-tabs mb-4 no-print" id="reportTabs" role="tablist">
         <li class="nav-item">
-            <button class="nav-link" id="stats-tab" data-bs-toggle="tab" data-bs-target="#stats" type="button">
-                📈 Estadísticas
-            </button>
-        </li>
-        <li class="nav-item">
             <button class="nav-link active" id="general-tab" data-bs-toggle="tab" data-bs-target="#general" type="button">
                 📑 Reporte General
             </button>
@@ -24,6 +19,11 @@
         <li class="nav-item">
             <button class="nav-link" id="completos-tab" data-bs-toggle="tab" data-bs-target="#completos" type="button">
                 🗓️ Horarios Completos
+            </button>
+        </li>
+        <li class="nav-item">
+            <button class="nav-link" id="stats-tab" data-bs-toggle="tab" data-bs-target="#stats" type="button">
+                📈 Estadísticas
             </button>
         </li>
         <li class="nav-item">
@@ -39,7 +39,7 @@
             <div class="card shadow-sm border-0">
                 <div class="card-body p-4">
                     <div class="d-flex justify-content-between align-items-center mb-3 no-print">
-                        <h5 class="card-title fw-bold">Oferta Académica Resumida</h5>
+                        <h5 class="card-title fw-bold">Oferta Académica</h5>
                         <button class="btn btn-outline-primary btn-sm" @click="imprimirGeneral">🖨️ Imprimir Reporte</button>
                     </div>
 
@@ -138,11 +138,85 @@
         </div>
 
         <div class="tab-pane fade" id="stats" role="tabpanel">
-            <div class="row">
+            <div class="container-fluid p-0">
+                <div v-if="estadisticas.resumen" class="row mb-4">
+                    <div class="col-md-3">
+                        <div class="card text-white bg-primary mb-3 h-100 shadow-sm">
+                            <div class="card-body">
+                                <h5 class="card-title">👨‍🏫 Profesores</h5>
+                                <h2 class="display-4 fw-bold">[[ estadisticas.resumen.total_profesores ]]</h2>
+                                <p class="card-text small opacity-75">Activos en nómina</p>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="col-md-3">
+                        <div class="card text-white bg-success mb-3 h-100 shadow-sm">
+                            <div class="card-body">
+                                <h5 class="card-title">📚 Cursos Totales</h5>
+                                <h2 class="display-4 fw-bold">[[ estadisticas.resumen.total_cursos ]]</h2>
+                                <p class="card-text small opacity-75">Paralelos planificados</p>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="col-md-3">
+                        <div class="card text-white bg-info mb-3 h-100 shadow-sm">
+                            <div class="card-body text-white">
+                                <h5 class="card-title">📖 Materias</h5>
+                                <h2 class="display-4 fw-bold">[[ estadisticas.resumen.total_materias ]]</h2>
+                                <p class="card-text small opacity-75">Idiomas ofertados</p>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="col-md-3">
+                        <div class="card text-white bg-secondary mb-3 h-100 shadow-sm">
+                            <div class="card-body">
+                                <h5 class="card-title">⚡ Ocupación</h5>
+                                <h2 class="display-4 fw-bold">[[ estadisticas.resumen.ocupacion_global_pct ]]%</h2>
+                                <p class="card-text small opacity-75">Capacidad docente utilizada</p>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <div v-if="estadisticas.resumen" class="row mb-4">
+                    <div class="col-md-6">
+                        <div class="card shadow-sm h-100">
+                            <div class="card-header bg-light fw-bold">Distribución por Modalidad</div>
+                            <div class="card-body">
+                                <div v-for="(count, mod) in estadisticas.resumen.distribucion_modalidad" :key="mod" class="mb-3">
+                                    <div class="d-flex justify-content-between mb-1">
+                                        <span class="small fw-bold">[[ mod ]]</span>
+                                        <span class="small badge bg-dark">[[ count ]] cursos</span>
+                                    </div>
+                                    <div class="progress" style="height: 10px;">
+                                        <div class="progress-bar bg-warning" role="progressbar" 
+                                             :style="{ width: (count / estadisticas.resumen.total_cursos * 100) + '%' }"></div>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                    
+                    <div class="col-md-6">
+                        <div class="card shadow-sm h-100">
+                            <div class="card-header bg-light fw-bold">Distribución por Cursos</div>
+                            <div class="card-body p-0">
+                                <ul class="list-group list-group-flush">
+                                    <li v-for="(item, index) in estadisticas.resumen.top_materias" :key="index" 
+                                        class="list-group-item d-flex justify-content-between align-items-center">
+                                        <span>[[ index + 1 ]]. [[ item[0] ]]</span>
+                                        <span class="badge bg-primary rounded-pill">[[ item[1] ]] paralelos</span>
+                                    </li>
+                                </ul>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
                 <div class="col-md-12 mb-4">
                     <div class="card shadow-sm">
+                        <div class="card-header bg-light fw-bold">Detalle de Carga Horaria Docente</div>
                         <div class="card-body">
-                            <h5 class="card-title">Carga Horaria por Profesor</h5>
                             <div v-for="p in estadisticas.profesores" :key="p.id" class="mb-3">
                                 <div class="d-flex justify-content-between mb-1">
                                     <span class="fw-bold">[[ p.nombre ]]</span>
@@ -312,7 +386,7 @@
         data() {
             return {
                 loading: true,
-                estadisticas: { profesores: [] },
+                estadisticas: { profesores: [], resumen: {} }, // Inicializar resumen vacío
                 profesores_list: [],
                 materias_list: [],
                 allEvents: [],
@@ -321,7 +395,7 @@
                 reporteGeneralData: {},
                 reporteCompletoData: {}, 
                 isPrintingIndividual: false,
-                isPrintingCompletos: false // NUEVO: Bandera para ocultar header en completos
+                isPrintingCompletos: false 
             }
         },
         mounted() {
@@ -486,11 +560,11 @@
 
             getNivelLabel(nivel) {
                 const n = parseInt(nivel);
-                if (n === 1) return "A1 – Principiante";
-                if (n === 2) return "A2 – Elemental";
-                if (n === 3) return "B1 – Pre-intermedio";
-                if (n === 4) return "B1+ – Intermedio";
-                if (n === 5) return "B2 – Intermedio Alto";
+                if (n === 1) return "Nivel 1: A1 – Principiante";
+                if (n === 2) return "Nivel 2: A2 – Elemental";
+                if (n === 3) return "Nivel 3: B1 – Pre-intermedio";
+                if (n === 4) return "Nivel 4: B1+ – Intermedio";
+                if (n === 5) return "Nivel 5: B2 – Intermedio Alto";
                 if (n >= 6) return `Nivel ${n}: Avanzado`;
                 return `Nivel ${n}`;
             },
@@ -516,20 +590,17 @@
                 document.title = "Reporte_General_Oferta";
                 setTimeout(() => { window.print(); document.title = originalTitle; }, 100);
             },
-            
-            // CAMBIO: Lógica para ocultar encabezado en Completos
             imprimirCompletos() {
                 this.isPrintingIndividual = false;
-                this.isPrintingCompletos = true; // Activa bandera
+                this.isPrintingCompletos = true; 
                 const originalTitle = document.title;
                 document.title = "Horarios_Completos_Lista";
                 this.$nextTick(() => {
                     window.print();
                     document.title = originalTitle;
-                    this.isPrintingCompletos = false; // Restaura
+                    this.isPrintingCompletos = false; 
                 });
             },
-            
             imprimirIndividual() {
                 this.isPrintingIndividual = true;
                 this.isPrintingCompletos = false;
