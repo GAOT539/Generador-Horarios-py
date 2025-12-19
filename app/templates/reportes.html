@@ -4,21 +4,26 @@
 <div id="app-reportes">
     <h2 class="text-primary fw-bold mb-4 no-print">📊 Reportes y Estadísticas</h2>
 
-    <div class="print-header text-center mb-4" :class="{ 'd-none': isPrintingIndividual }">
-        <h1 class="fw-bold">HORARIOS ACADÉMICOS</h1>
-        <p class="text-muted">Centro de Idiomas</p>
-        <hr>
+    <div class="print-header text-center mb-2" :class="{ 'd-none': isPrintingIndividual || isPrintingCompletos }">
+        <h2 class="fw-bold m-0">HORARIOS ACADÉMICOS</h2>
+        <p class="text-muted small m-0">Centro de Idiomas</p>
+        <hr class="my-2">
     </div>
 
     <ul class="nav nav-tabs mb-4 no-print" id="reportTabs" role="tablist">
+        <li class="nav-item">
+            <button class="nav-link" id="stats-tab" data-bs-toggle="tab" data-bs-target="#stats" type="button">
+                📈 Estadísticas
+            </button>
+        </li>
         <li class="nav-item">
             <button class="nav-link active" id="general-tab" data-bs-toggle="tab" data-bs-target="#general" type="button">
                 📑 Reporte General
             </button>
         </li>
         <li class="nav-item">
-            <button class="nav-link" id="stats-tab" data-bs-toggle="tab" data-bs-target="#stats" type="button">
-                📈 Estadísticas Docentes
+            <button class="nav-link" id="completos-tab" data-bs-toggle="tab" data-bs-target="#completos" type="button">
+                🗓️ Horarios Completos
             </button>
         </li>
         <li class="nav-item">
@@ -43,32 +48,32 @@
                     </div>
 
                     <div v-else>
-                        <div v-for="(gruposModalidad, idioma) in reporteGeneralData" :key="idioma" class="mb-5 section-break">
-                            <h3 class="text-uppercase fw-bold text-dark border-bottom border-3 pb-2 mb-4" style="border-color: #0d6efd !important;">
+                        <div v-for="(gruposModalidad, idioma) in reporteGeneralData" :key="idioma" class="mb-4 section-break">
+                            <h3 class="text-uppercase fw-bold text-dark border-bottom border-3 pb-1 mb-3 title-keep" style="border-color: #0d6efd !important;">
                                 📘 [[ idioma ]]
                             </h3>
 
-                            <div v-for="(niveles, modalidad) in gruposModalidad" :key="modalidad" class="mb-4 ms-2">
-                                <div class="p-2 mb-3 bg-light border-start border-4 border-primary modal-header-print">
-                                    <h5 class="fw-bold text-primary m-0 text-uppercase">
+                            <div v-for="(niveles, modalidad) in gruposModalidad" :key="modalidad" class="mb-3 ms-2">
+                                <div class="p-1 mb-2 bg-light border-start border-4 border-primary modal-header-print">
+                                    <h6 class="fw-bold text-primary m-0 text-uppercase">
                                         MODALIDAD [[ modalidad ]]
-                                    </h5>
+                                    </h6>
                                 </div>
 
-                                <div v-for="(horarios, nivelNum) in niveles" :key="nivelNum" class="mb-4 ms-3">
-                                    <h6 class="fw-bold text-secondary text-uppercase mb-2">
+                                <div v-for="(horarios, nivelNum) in niveles" :key="nivelNum" class="mb-3 ms-3">
+                                    <h6 class="fw-bold text-secondary text-uppercase mb-1" style="font-size: 0.9rem;">
                                         [[ getNivelLabel(nivelNum) ]]
                                     </h6>
                                     
                                     <div class="table-responsive">
-                                        <table class="table table-sm table-hover table-print">
+                                        <table class="table table-sm table-borderless table-print mb-1">
                                             <tbody>
                                                 <tr v-for="(info, horarioKey) in horarios" :key="horarioKey">
-                                                    <td class="w-75 ps-3">
-                                                        <span class="fw-bold text-dark">Horario:</span> [[ info.texto ]]
+                                                    <td class="ps-3 py-0">
+                                                        <span class="fw-bold text-dark" style="font-size: 0.85rem;">• [[ info.texto ]]</span>
                                                     </td>
-                                                    <td class="w-25 text-end pe-3">
-                                                        <span class="badge bg-white text-dark border border-secondary rounded-pill">
+                                                    <td class="text-end pe-3 py-0" style="width: 150px;">
+                                                        <span class="badge bg-white text-dark border border-secondary rounded-pill" style="font-size: 0.75rem;">
                                                             # Paralelos: [[ info.cantidad ]]
                                                         </span>
                                                     </td>
@@ -79,9 +84,53 @@
                                 </div>
                             </div>
                         </div>
+                    </div>
+                </div>
+            </div>
+        </div>
 
-                        <div v-if="Object.keys(reporteGeneralData).length === 0" class="alert alert-warning no-print">
-                            No hay horarios generados aún.
+        <div class="tab-pane fade" id="completos" role="tabpanel">
+            <div class="card shadow-sm border-0">
+                <div class="card-body">
+                    <div class="d-flex justify-content-between align-items-center mb-3 no-print">
+                        <h5 class="card-title fw-bold">Listado Completo de Horarios</h5>
+                        <button class="btn btn-outline-primary btn-sm" @click="imprimirCompletos">🖨️ Imprimir Lista</button>
+                    </div>
+
+                    <div v-if="!loading">
+                        <div v-for="(niveles, idioma) in reporteCompletoData" :key="idioma" class="mb-5 section-break-always">
+                            <div class="text-center mb-4 pb-2 border-bottom title-keep">
+                                <h2 class="fw-bold text-uppercase text-dark">[[ idioma ]]</h2>
+                            </div>
+
+                            <div v-for="(eventosNivel, nivel) in niveles" :key="nivel" class="mb-4 avoid-break">
+                                <h5 class="fw-bold text-white bg-secondary p-2 ps-3 rounded-top mb-0" style="font-size: 1rem;">
+                                    [[ getNivelLabel(nivel) ]]
+                                </h5>
+
+                                <div class="table-responsive">
+                                    <table class="table table-bordered table-striped table-hover text-center align-middle mb-0 table-list-print">
+                                        <thead class="bg-light text-dark">
+                                            <tr>
+                                                <th style="width: 15%;">MODALIDAD</th>
+                                                <th style="width: 10%;">PARALELO</th>
+                                                <th style="width: 40%;">HORARIO</th>
+                                                <th style="width: 35%;">PROFESOR</th>
+                                            </tr>
+                                        </thead>
+                                        <tbody>
+                                            <tr v-for="clase in ordenarClases(eventosNivel)" :key="clase.id">
+                                                <td class="fw-bold" :class="clase.modalidad === 'ONLINE' ? 'text-warning-dark' : 'text-primary'">
+                                                    [[ clase.modalidad ]]
+                                                </td>
+                                                <td class="fw-bold fs-5">[[ clase.curso ]]</td>
+                                                <td class="text-start ps-4">[[ getHorarioTexto(clase.start, clase.end, clase.rawModalidad) ]]</td>
+                                                <td class="text-start ps-4">[[ clase.profesor ]]</td>
+                                            </tr>
+                                        </tbody>
+                                    </table>
+                                </div>
+                            </div>
                         </div>
                     </div>
                 </div>
@@ -188,7 +237,7 @@
                     
                     <div v-else-if="profesorSeleccionado && !tieneClases" class="alert alert-info mt-5 text-center p-5 no-print">
                         <h4>ℹ️ Sin Asignaciones</h4>
-                        <p>El profesor seleccionado no tiene clases asignadas en el horario actual.</p>
+                        <p>El profesor seleccionado no tiene clases asignadas.</p>
                     </div>
                 </div>
             </div>
@@ -198,8 +247,10 @@
 </div>
 
 <style>
-    /* Estilos Generales Pantalla */
+    /* Estilos Generales */
     .ls-2 { letter-spacing: 2px; }
+    .text-warning-dark { color: #856404 !important; }
+    
     .clase-box {
         padding: 4px;
         border-radius: 4px;
@@ -210,49 +261,43 @@
     .clase-box.online { background-color: #fff3cd; color: #856404; border-left: 3px solid #ffc107; }
     .badge-mod { font-size: 0.65rem; text-transform: uppercase; opacity: 0.8; }
 
-    /* ESTILOS DE IMPRESIÓN (PDF) */
-    .print-header { display: none; } /* Oculto en pantalla */
+    /* ESTILOS DE IMPRESIÓN */
+    .print-header { display: none; }
 
     @media print {
-        @page { margin: 0.5cm; size: A4; } /* Márgenes mínimos para ajustar */
-        body { background: white; -webkit-print-color-adjust: exact !important; print-color-adjust: exact !important; }
+        @page { margin: 0.5cm; size: A4; margin-top: 0.5cm; }
         
-        .no-print, .nav, .btn, .sidebar, header, .sidebar-wrapper, .navbar { display: none !important; }
-        .print-header { display: block !important; margin-bottom: 10px; }
+        body { 
+            background: white; 
+            -webkit-print-color-adjust: exact !important; 
+            print-color-adjust: exact !important;
+            margin: 0 !important;
+            padding: 0 !important;
+        }
         
-        /* Ocultar header global si estamos imprimiendo individual */
+        .no-print, .nav, .btn, .sidebar, header, .sidebar-wrapper, .navbar, footer { display: none !important; }
+        .print-header { display: block !important; margin-bottom: 10px; margin-top: 0; padding-top: 0; }
         .print-header.d-none { display: none !important; }
 
         .card { border: none !important; box-shadow: none !important; }
         
-        /* ESTILOS COMPACTOS PARA INDIVIDUAL */
-        .table-individual-print th { 
-            background-color: #0d6efd !important; 
-            color: white !important; 
-            font-size: 0.6rem !important; 
-            padding: 2px !important;
-        }
-        .table-individual-print td { 
-            font-size: 0.6rem !important; 
-            padding: 1px !important; 
-            height: 25px; /* Altura forzada para compactar */
-        }
-        .clase-box { 
-            border: 1px solid #ccc; 
-            background: none !important; 
-            color: black !important; 
-            font-size: 0.55rem !important;
-            padding: 1px;
-            margin: 0;
-            line-height: 1.1;
-        }
-        .badge-mod { display: none; } /* Ocultar etiqueta modalidad para ahorrar espacio */
+        /* Reporte General */
+        .section-break { page-break-inside: auto; margin-bottom: 15px; display: block; }
+        .title-keep, h3 { page-break-after: avoid; break-after: avoid; }
+        .avoid-break { page-break-inside: avoid; }
         
-        /* Estilo Reporte General */
-        .section-break { page-break-inside: avoid; margin-bottom: 20px; }
-        .modal-header-print { background-color: #f8f9fa !important; border-left: 5px solid #000 !important; color: black !important; }
-        .table-print td { border-bottom: 1px solid #eee; padding: 4px 0; font-size: 0.8rem; }
-        h3 { color: black !important; border-bottom: 2px solid black !important; font-size: 1.2rem !important; }
+        .modal-header-print { background-color: #f8f9fa !important; border-left: 5px solid #000 !important; color: black !important; padding: 2px !important; page-break-after: avoid; }
+        .table-print td { border-bottom: 1px solid #eee; padding: 2px 0; font-size: 0.8rem; }
+        
+        /* Reporte Completo */
+        .section-break-always { page-break-before: always; }
+        .table-list-print th { background-color: #333 !important; color: white !important; font-size: 0.8rem !important; padding: 4px; }
+        .table-list-print td { font-size: 0.8rem !important; padding: 4px !important; border-bottom: 1px solid #ccc !important; }
+        
+        /* Individual */
+        .table-individual-print th { background-color: #0d6efd !important; color: white !important; font-size: 0.65rem !important; padding: 2px !important; }
+        .table-individual-print td { font-size: 0.65rem !important; padding: 1px !important; height: 25px; }
+        .clase-box { border: 1px solid #ccc; background: none !important; color: black !important; font-size: 0.6rem !important; padding: 1px; }
         
         .tab-pane { display: block !important; opacity: 1 !important; visibility: visible !important; }
         .tab-pane:not(.active) { display: none !important; }
@@ -274,7 +319,9 @@
                 profesorSeleccionado: null,
                 tieneClases: false,
                 reporteGeneralData: {},
-                isPrintingIndividual: false // Estado para controlar encabezado
+                reporteCompletoData: {}, 
+                isPrintingIndividual: false,
+                isPrintingCompletos: false // NUEVO: Bandera para ocultar header en completos
             }
         },
         mounted() {
@@ -307,26 +354,24 @@
                     this.allEvents = await resHorario.json();
                     
                     this.procesarReporteGeneral();
+                    this.procesarReporteCompleto();
 
                 } catch (e) { console.error(e); }
                 finally { this.loading = false; }
             },
 
+            // --- Lógica Reporte Resumido ---
             procesarReporteGeneral() {
                 const agrupado = {};
-
                 this.allEvents.forEach(ev => {
                     const props = ev.extendedProps;
                     const matObj = this.materias_list.find(m => m.id === props.materia_id);
                     const nombreMateria = matObj ? matObj.nombre : "Desconocido";
                     const nivel = matObj ? matObj.nivel : 0;
-                    
-                    let modTexto = "PRESENCIAL";
-                    if (props.modalidad.includes('ONLINE')) modTexto = "EN LÍNEA";
+                    let modTexto = props.modalidad.includes('ONLINE') ? "EN LÍNEA" : "PRESENCIAL";
                     
                     const fecha = new Date(ev.start);
                     const diaSemana = fecha.getDay(); 
-                    
                     const horaInicio = fecha.getHours();
                     const horaFin = new Date(ev.end).getHours();
                     const hIniStr = horaInicio.toString().padStart(2, '0') + ":00";
@@ -338,9 +383,6 @@
                     if (diaSemana >= 1 && diaSemana <= 4) { 
                         textoHorario = `lunes a jueves ${hIniStr} - ${hFinStr}`;
                         ordenDia = 1;
-                    } else if (diaSemana === 5) { 
-                        textoHorario = `viernes ${hIniStr} - ${hFinStr}`;
-                        ordenDia = 2;
                     } else if (diaSemana === 6) { 
                         textoHorario = `sábado ${hIniStr} a ${hFinStr}`;
                         ordenDia = 3;
@@ -354,18 +396,14 @@
                     if (!agrupado[nombreMateria][modTexto][nivel]) agrupado[nombreMateria][modTexto][nivel] = {};
                     
                     const keyHorario = `${ordenDia}_${textoHorario}`;
-
                     if (!agrupado[nombreMateria][modTexto][nivel][keyHorario]) {
                         agrupado[nombreMateria][modTexto][nivel][keyHorario] = new Set();
                     }
-                    
                     const match = ev.title.match(/\(([^)]+)\)/);
-                    const cursoLetra = match ? match[1] : "UNK";
-                    agrupado[nombreMateria][modTexto][nivel][keyHorario].add(cursoLetra);
+                    agrupado[nombreMateria][modTexto][nivel][keyHorario].add(match ? match[1] : "UNK");
                 });
 
                 const resultadoFinal = {};
-                
                 Object.keys(agrupado).sort().forEach(idioma => {
                     resultadoFinal[idioma] = {};
                     Object.keys(agrupado[idioma]).sort().forEach(mod => {
@@ -373,34 +411,93 @@
                         Object.keys(agrupado[idioma][mod]).sort((a,b) => a-b).forEach(nivel => {
                             const horariosObj = agrupado[idioma][mod][nivel];
                             const listaHorarios = [];
-                            
                             Object.keys(horariosObj).sort().forEach(key => {
-                                const textoReal = key.split('_')[1]; 
-                                listaHorarios.push({
-                                    texto: textoReal,
-                                    cantidad: horariosObj[key].size 
-                                });
+                                listaHorarios.push({ texto: key.split('_')[1], cantidad: horariosObj[key].size });
                             });
-                            
                             resultadoFinal[idioma][mod][nivel] = listaHorarios;
                         });
                     });
                 });
-
                 this.reporteGeneralData = resultadoFinal;
+            },
+
+            // --- Lógica Reporte Completo ---
+            procesarReporteCompleto() {
+                const datos = {};
+                const cursosProcesados = new Set();
+
+                this.allEvents.forEach(ev => {
+                    const props = ev.extendedProps;
+                    const matObj = this.materias_list.find(m => m.id === props.materia_id);
+                    const idioma = matObj ? matObj.nombre : "OTRO";
+                    const nivel = matObj ? matObj.nivel : 0;
+                    
+                    const match = ev.title.match(/\(([^)]+)\)/);
+                    const letraCurso = match ? match[1] : props.curso_turno;
+                    
+                    const uniqueKey = `${props.materia_id}-${letraCurso}-${props.modalidad}`;
+
+                    if (cursosProcesados.has(uniqueKey)) return;
+                    cursosProcesados.add(uniqueKey);
+
+                    if (!datos[idioma]) datos[idioma] = {};
+                    if (!datos[idioma][nivel]) datos[idioma][nivel] = [];
+                    
+                    const lines = ev.title.split('\n');
+                    
+                    datos[idioma][nivel].push({
+                        id: Math.random(),
+                        profesor: lines[1],
+                        curso: letraCurso, 
+                        modalidad: props.modalidad.includes('ONLINE') ? 'ONLINE' : 'PRESENCIAL',
+                        rawModalidad: props.modalidad, 
+                        start: new Date(ev.start),
+                        end: new Date(ev.end)
+                    });
+                });
+                this.reporteCompletoData = datos;
+            },
+
+            // --- Helpers Generales ---
+            getHorarioTexto(start, end, rawMod) {
+                if (rawMod && rawMod.includes('FDS')) {
+                    const hIni = start.getHours().toString().padStart(2, '0') + ":00";
+                    const hFin = end.getHours().toString().padStart(2, '0') + ":00";
+                    return `Sábados y Domingos ${hIni} - ${hFin}`;
+                }
+
+                const dia = start.getDay(); 
+                const hIni = start.getHours().toString().padStart(2, '0') + ":00";
+                const hFin = end.getHours().toString().padStart(2, '0') + ":00";
+                
+                if (dia >= 1 && dia <= 4) return `Lunes a Jueves ${hIni} - ${hFin}`;
+                if (dia === 5) return `Viernes ${hIni} - ${hFin}`;
+                if (dia === 6) return `Sábado ${hIni} - ${hFin}`;
+                if (dia === 0) return `Domingo ${hIni} - ${hFin}`;
+                return "Horario Especial";
+            },
+
+            ordenarClases(eventos) {
+                return eventos.sort((a,b) => {
+                    if (a.modalidad !== b.modalidad) return b.modalidad.localeCompare(a.modalidad);
+                    return a.curso.localeCompare(b.curso);
+                });
             },
 
             getNivelLabel(nivel) {
                 const n = parseInt(nivel);
-                if (n === 1) return "Nivel 1: A1 – Principiante";
-                if (n === 2) return "Nivel 2: A2 – Elemental";
-                if (n === 3) return "Nivel 3: B1 – Pre-intermedio";
-                if (n === 4) return "Nivel 4: B1+ – Intermedio";
-                if (n === 5) return "Nivel 5: B2 – Intermedio Alto";
+                if (n === 1) return "A1 – Principiante";
+                if (n === 2) return "A2 – Elemental";
+                if (n === 3) return "B1 – Pre-intermedio";
+                if (n === 4) return "B1+ – Intermedio";
+                if (n === 5) return "B2 – Intermedio Alto";
                 if (n >= 6) return `Nivel ${n}: Avanzado`;
                 return `Nivel ${n}`;
             },
-
+            getNombreProfesor(id) {
+                const p = this.profesores_list.find(x => x.id === id);
+                return p ? p.nombre : '';
+            },
             getEstadoClass(estado) {
                 if(estado === 'SIN_CARGA') return 'text-danger';
                 if(estado === 'SOBRECARGA') return 'text-warning';
@@ -412,54 +509,54 @@
                 return '#198754';
             },
 
-            getNombreProfesor(id) {
-                const p = this.profesores_list.find(x => x.id === id);
-                return p ? p.nombre : '';
-            },
-
             imprimirGeneral() {
                 this.isPrintingIndividual = false;
+                this.isPrintingCompletos = false;
                 const originalTitle = document.title;
-                document.title = "Reporte_Horarios";
+                document.title = "Reporte_General_Oferta";
                 setTimeout(() => { window.print(); document.title = originalTitle; }, 100);
             },
             
+            // CAMBIO: Lógica para ocultar encabezado en Completos
+            imprimirCompletos() {
+                this.isPrintingIndividual = false;
+                this.isPrintingCompletos = true; // Activa bandera
+                const originalTitle = document.title;
+                document.title = "Horarios_Completos_Lista";
+                this.$nextTick(() => {
+                    window.print();
+                    document.title = originalTitle;
+                    this.isPrintingCompletos = false; // Restaura
+                });
+            },
+            
             imprimirIndividual() {
-                this.isPrintingIndividual = true; // Activa bandera para ocultar header global
+                this.isPrintingIndividual = true;
+                this.isPrintingCompletos = false;
                 const nombre = this.getNombreProfesor(this.profesorSeleccionado);
                 const nombreSafe = nombre.replace(/[^a-zA-Z0-9]/g, '_');
                 const originalTitle = document.title;
                 document.title = `Horario_${nombreSafe}`;
-                
-                // Esperar a que Vue actualice el DOM (oculte el header) antes de imprimir
                 this.$nextTick(() => {
                     window.print();
                     document.title = originalTitle;
-                    this.isPrintingIndividual = false; // Restaurar estado
+                    this.isPrintingIndividual = false;
                 });
             },
 
             getClaseEnHora(diaTarget, horaTarget) {
                 if (!this.profesorSeleccionado) return null;
-                
                 const eventosProfe = this.allEvents.filter(e => e.extendedProps.profesor_id === this.profesorSeleccionado);
-                
                 const clase = eventosProfe.find(ev => {
                     const d = new Date(ev.start);
                     let jsDay = d.getDay(); 
                     let dbDay = jsDay === 0 ? 6 : jsDay - 1; 
-                    
                     if (dbDay !== diaTarget) return false;
-                    
                     const hStart = d.getHours();
                     const hEnd = new Date(ev.end).getHours();
-                    
-                    // CORRECCIÓN: Verificar si la horaTarget está dentro del rango
-                    return horaTarget >= hStart && horaTarget < hEnd;
+                    return horaTarget >= hStart && horaTarget < hEnd; 
                 });
-
                 if (!clase) return null;
-
                 const lines = clase.title.split('\n');
                 return {
                     materia: lines[0],
