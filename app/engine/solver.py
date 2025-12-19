@@ -6,6 +6,17 @@ from app.models import Profesor, Materia, Curso, Horario, ProfesorMateria, db
 # Configurar logger local para este módulo
 logger = logging.getLogger(__name__)
 
+# --- FUNCIÓN AUXILIAR PARA GENERAR LETRAS (A, B... AA, AB...) ---
+def generar_etiqueta_curso(n):
+    """
+    Convierte un índice 0, 1, 2... en etiquetas A, B, C... AA, AB...
+    """
+    result = ""
+    while n >= 0:
+        result = chr(65 + (n % 26)) + result
+        n = (n // 26) - 1
+    return result
+
 def generar_horario_automatico():
     logger.info("--- Iniciando proceso de generación de horarios ---")
     
@@ -18,32 +29,32 @@ def generar_horario_automatico():
 
         # ORDEN CRÍTICO: Aseguramos que se creen y se lean en el mismo orden (por ID)
         materias = list(Materia.select().order_by(Materia.id))
-        letras = ['A', 'B', 'C', 'D', 'E', 'F', 'G', 'H', 'I', 'J', 'K', 'L', 'M', 'N']
         
         # --- FASE 1: CREACIÓN DE CURSOS ---
         with db.atomic():
             for m in materias:
                 # 1. Crear Cursos REGULARES
-                cant_reg = min(m.cantidad_regular, 14)
+                # CAMBIO: Eliminado límite min(..., 14). Ahora es ilimitado.
+                cant_reg = m.cantidad_regular 
                 for i in range(cant_reg):
-                    letra = letras[i]
+                    letra = generar_etiqueta_curso(i) # Generación dinámica (A, B... AA...)
                     turno = 'Matutino' if i % 2 == 0 else 'Vespertino' 
                     Curso.create(nombre=letra, nivel=m.nivel, turno=turno, modalidad='REGULAR')
                     
                 # 2. Crear Cursos ONLINE L-J
-                cant_online_lj = min(m.cantidad_online_lj, 10)
+                # CAMBIO: Eliminado límite min(..., 10).
+                cant_online_lj = m.cantidad_online_lj
                 for i in range(cant_online_lj):
-                    letra = letras[i] 
+                    letra = generar_etiqueta_curso(i) 
                     turno = 'Matutino' if i % 2 == 0 else 'Nocturno'
                     Curso.create(nombre=letra, nivel=m.nivel, turno=turno, modalidad='ONLINE_LJ')
-                    # print(f"DEBUG: Creado {m.nombre} Curso {letra} (ONLINE L-J)") 
 
                 # 3. Crear Cursos ONLINE Fin de Semana
-                cant_online_fds = min(m.cantidad_online_fds, 5)
+                # CAMBIO: Eliminado límite min(..., 5).
+                cant_online_fds = m.cantidad_online_fds
                 for i in range(cant_online_fds):
-                    letra = letras[i]
+                    letra = generar_etiqueta_curso(i)
                     Curso.create(nombre=letra, nivel=m.nivel, turno='FDS', modalidad='ONLINE_FDS')
-                    # print(f"DEBUG: Creado {m.nombre} Curso {letra} (ONLINE FDS)")
 
         # --- CARGA DE DATOS ---
         profesores = list(Profesor.select())
@@ -61,7 +72,6 @@ def generar_horario_automatico():
             return {"status": "error", "message": err_msg}
 
         # --- FASE 2: VALIDACIONES ESPECÍFICAS DE ERRORES ---
-        # Antes de crear el modelo, verificamos viabilidad básica
         print("--- 1.5 Validando Recursos Docentes ---")
         for materia in materias_planificadas:
             # 1. Buscar profesores aptos
@@ -86,12 +96,10 @@ def generar_horario_automatico():
             # Online FDS: 4 horas semana
             horas_necesarias += materia.cantidad_online_fds * 4
 
-            # Capacidad total de los profesores aptos (aproximada, ya que comparten tiempo con otras materias)
+            # Capacidad total de los profesores aptos
             capacidad_docente_total = sum([p.max_horas_semana for p in lista_profes])
 
             # ERROR 2: Matemáticamente imposible por falta de horas
-            # Nota: Esta es una validación "blanda" porque los profes pueden dar otras materias,
-            # pero si la demanda SOLO de esta materia supera la oferta TOTAL, es imposible seguro.
             if horas_necesarias > capacidad_docente_total:
                 err_msg = (f"INSUFICIENCIA DOCENTE: '{materia.nombre}' Nivel {materia.nivel} requiere {horas_necesarias} horas, "
                            f"pero los docentes asignados solo suman {capacidad_docente_total} horas disponibles totales.")
@@ -127,7 +135,6 @@ def generar_horario_automatico():
                 for _ in range(necesarios):
                     cursos_objetivo.append(cursos_disponibles.pop(0)) # FIFO
             else:
-                # Esto no debería pasar gracias a la creación previa, pero por seguridad:
                 msg = f"Error interno: Inconsistencia en cursos creados vs requeridos para {materia.nombre}"
                 logger.error(msg)
                 return {"status": "error", "message": msg}
@@ -135,7 +142,6 @@ def generar_horario_automatico():
             profes_aptos = (Profesor.select().join(ProfesorMateria).where(ProfesorMateria.materia == materia))
             profes_ids = [p.id for p in profes_aptos]
             
-            # Validación redundante pero segura
             if not profes_ids: continue 
 
             for curso in cursos_objetivo:
@@ -175,7 +181,6 @@ def generar_horario_automatico():
             if mod in ['REGULAR', 'ONLINE_LJ']:
                 vars_curso = [var for k, var in shifts.items() if k[0] == c_idx]
                 if not vars_curso:
-                    # Si no hay variables, significa que no hay huecos/profes compatibles para las restricciones dadas
                     err_msg = f"Imposible asignar curso {clase['materia'].nombre} ({mod}). Verifique disponibilidad horaria de docentes."
                     logger.error(err_msg)
                     return {"status": "error", "message": err_msg}
@@ -358,7 +363,6 @@ def generar_horario_automatico():
         # --- SOLVER ---
         print("--- Iniciando CP-SAT Solver ---")
         solver = cp_model.CpSolver()
-        # Ajuste de parámetros para que no se quede pegado si es muy complejo
         solver.parameters.max_time_in_seconds = 60.0 
         status = solver.Solve(model)
 
@@ -420,7 +424,6 @@ def generar_horario_automatico():
             return {"status": "error", "message": msg}
 
     except Exception as e:
-        # CAPTURA DE ERRORES INESPERADOS
         error_detail = traceback.format_exc()
         logger.critical(f"Excepción no controlada en el motor: {str(e)}\n{error_detail}")
         return {"status": "error", "message": f"Error interno del sistema: {str(e)}. Revise los logs."}
