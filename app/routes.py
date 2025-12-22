@@ -10,7 +10,6 @@ bp = Blueprint('main', __name__)
 def index():
     return render_template('index.html')
 
-# --- NUEVA RUTA ---
 @bp.route('/calendario')
 def calendario():
     return render_template('calendario.html')
@@ -23,22 +22,19 @@ def config():
 def reportes():
     return render_template('reportes.html')
 
-# ... (El resto del archivo routes.py se mantiene EXACTAMENTE IGUAL) ...
-# ... (API Materias, API Profesores, API Cursos, API Generar, etc.) ...
-# ... Asegúrate de mantener todo el código de las APIs que ya tenías ...
-
-# --- API MATERIAS ---
+# --- API MATERIAS (ACTUALIZADA TAREA 2) ---
 @bp.route('/api/materias', methods=['GET', 'POST', 'DELETE'])
 def manage_materias():
     if request.method == 'POST':
         data = request.json
         try:
+            # Convertimos el objeto JSON del frontend a string para guardarlo en la BD
+            desglose_str = json.dumps(data['desglose'])
+            
             Materia.create(
                 nombre=data['nombre'],
                 nivel=int(data['nivel']),
-                cantidad_regular=int(data['cantidad_regular']),
-                cantidad_online_lj=int(data['cantidad_online_lj']),
-                cantidad_online_fds=int(data['cantidad_online_fds'])
+                desglose_horarios=desglose_str
             )
             return jsonify({'status': 'ok'})
         except Exception as e:
@@ -56,14 +52,26 @@ def manage_materias():
     materias = Materia.select().order_by(Materia.nombre, Materia.nivel)
     lista = []
     for m in materias:
+        # Recuperamos el desglose. Si es antiguo o falla, usamos default vacío.
+        try:
+            desglose = json.loads(m.desglose_horarios)
+        except:
+            desglose = {"PRESENCIAL":{}, "ONLINE_LJ":{}, "ONLINE_FDS":{}}
+
+        # Calculamos totales al vuelo para visualización
+        total_reg = sum(desglose.get('PRESENCIAL', {}).values())
+        total_on_lj = sum(desglose.get('ONLINE_LJ', {}).values())
+        total_on_fds = sum(desglose.get('ONLINE_FDS', {}).values())
+
         lista.append({
             'id': m.id,
             'nombre': m.nombre,
             'nivel': m.nivel,
-            'cantidad_regular': m.cantidad_regular,
-            'cantidad_online_lj': m.cantidad_online_lj,
-            'cantidad_online_fds': m.cantidad_online_fds,
-            'nombre_completo': f"{m.nombre} (Nivel {m.nivel})"
+            'cantidad_regular': total_reg,     # Calculado para la vista
+            'cantidad_online_lj': total_on_lj, # Calculado para la vista
+            'cantidad_online_fds': total_on_fds, # Calculado para la vista
+            'nombre_completo': f"{m.nombre} (Nivel {m.nivel})",
+            'desglose': desglose # Enviamos el detalle por si se necesita
         })
     return jsonify(lista)
 
@@ -256,6 +264,7 @@ def get_estadisticas():
         })
 
     # 2. Análisis Avanzado (Cursos Únicos)
+    # Agrupar horarios por Curso ID para no contar bloques individuales como cursos distintos
     cursos_unicos_query = (Horario
                            .select(Horario.curso, Curso.modalidad, Curso.turno, Materia.nombre)
                            .join(Curso, on=(Horario.curso == Curso.id))
@@ -268,21 +277,26 @@ def get_estadisticas():
     stats_materias = {}
 
     for entry in cursos_unicos_query:
+        # Modalidad
         mod = entry.curso.modalidad
         if mod in stats_modalidad:
             stats_modalidad[mod] += 1
         else:
+            # Fallback para modalidades antiguas si existieran
             stats_modalidad[mod] = 1
         
+        # Turno
         turno = entry.curso.turno
         if turno in stats_turno:
             stats_turno[turno] += 1
         else:
             stats_turno[turno] = 1
             
+        # Materia
         mat_nombre = entry.materia.nombre
         stats_materias[mat_nombre] = stats_materias.get(mat_nombre, 0) + 1
 
+    # Top 5 Materias
     top_materias = sorted(stats_materias.items(), key=lambda x: x[1], reverse=True)[:5]
 
     return jsonify({
@@ -302,6 +316,7 @@ def get_estadisticas():
 @bp.route('/api/backup', methods=['GET'])
 def backup_data():
     try:
+        # Recuperamos materias con su nuevo campo
         materias = list(Materia.select().dicts())
         profesores_data = []
         for p in Profesor.select():
@@ -342,11 +357,10 @@ def restore_data():
             Curso.delete().execute()
 
             for m in data['materias']:
+                # Restauración con soporte para el nuevo campo desglose
                 Materia.create(
                     nombre=m['nombre'], nivel=m['nivel'],
-                    cantidad_regular=m.get('cantidad_regular', 0),
-                    cantidad_online_lj=m.get('cantidad_online_lj', 0),
-                    cantidad_online_fds=m.get('cantidad_online_fds', 0)
+                    desglose_horarios=m.get('desglose_horarios', '{}') 
                 )
 
             for p in data['profesores']:
