@@ -3,6 +3,7 @@ from app.database import db
 import logging
 from logging.handlers import RotatingFileHandler
 import os
+from app.models import Profesor, Materia, Curso, Horario, ProfesorMateria
 
 def create_app():
     app = Flask(__name__)
@@ -21,8 +22,21 @@ def create_app():
 
     app.logger.setLevel(logging.INFO)
     app.logger.info('Iniciando Sistema de Horarios')
-    # -----------------------------
-
+    
+    # ---INICIALIZACIÓN DE TABLAS ---
+    try:
+        if db.is_closed():
+            db.connect()
+        # safe=True evita errores si las tablas ya existen
+        db.create_tables([Profesor, Materia, Curso, Horario, ProfesorMateria], safe=True)
+        app.logger.info("Base de datos inicializada: Tablas verificadas.")
+    except Exception as e:
+        app.logger.critical(f"Error crítico creando tablas: {str(e)}")
+    finally:
+        if not db.is_closed():
+            db.close()
+    
+    # --- GESTIÓN DE CONEXIONES A LA BASE DE DATOS ---
     @app.before_request
     def before_request():
         if db.is_closed():
