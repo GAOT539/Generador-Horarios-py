@@ -1,6 +1,26 @@
 {% extends "base.html" %}
 
 {% block content %}
+<script src="https://unpkg.com/@popperjs/core@2"></script>
+<script src="https://unpkg.com/tippy.js@6"></script>
+
+<style>
+    .tippy-box[data-theme~='custom'] {
+        background-color: #343a40;
+        color: white;
+        font-size: 0.85rem;
+        border-radius: 6px;
+        text-align: left;
+    }
+    .tooltip-header {
+        border-bottom: 1px solid rgba(255,255,255,0.2);
+        padding-bottom: 4px;
+        margin-bottom: 4px;
+        font-weight: bold;
+        color: #ffc107;
+    }
+</style>
+
 <div id="app">
     <h2 class="mb-4">Configuración del Sistema</h2>
 
@@ -47,9 +67,9 @@
                                 <div class="col-md-4">
                                     <div class="p-2 bg-light border rounded h-100">
                                         <h6 class="fw-bold text-center text-dark mb-2" style="font-size: 0.8rem;">🏫 Presencial<br>(Lunes-Jueves)</h6>
-                                        <div v-for="h in [7, 9, 11, 13, 15, 17, 19]" :key="'p'+h" class="mb-1 d-flex justify-content-between align-items-center justify-content-center border-bottom pb-1">
-                                            <span class="mb-1" style="font-size: 0.75rem;">[[ h < 10 ? '0'+h : h ]]:00 - [[ (h+2) < 10 ? '0'+(h+2) : (h+2) ]]:00</span>
-                                            <input type="number" v-model.number="nuevaMateria.desglose.PRESENCIAL[h]" class="form-control form-control-sm p-1 text-center" style="width: 50px;" min="0">
+                                        <div v-for="h in [7, 9, 11, 13, 15, 17, 19]" :key="'p'+h" class="mb-1 d-flex justify-content-between align-items-center border-bottom pb-1">
+                                            <span style="font-size: 0.90rem;">[[ h < 10 ? '0'+h : h ]]:00 - [[ (h+2) < 10 ? '0'+(h+2) : (h+2) ]]:00</span>
+                                            <input type="number" v-model.number="nuevaMateria.desglose.PRESENCIAL[h]" class="form-control form-control-sm p-1 text-center" style="width: 40px;" min="0">
                                         </div>
                                     </div>
                                 </div>
@@ -57,9 +77,9 @@
                                 <div class="col-md-4">
                                     <div class="p-2 bg-light border rounded h-100">
                                         <h6 class="fw-bold text-center text-success mb-2" style="font-size: 0.8rem;">💻 Virtual<br>(Lunes-Jueves)</h6>
-                                        <div v-for="h in [7, 9, 11, 13, 15, 17, 19]" :key="'olj'+h" class="mb-1 d-flex justify-content-between align-items-center justify-content-center border-bottom pb-1">
-                                            <span class="mb-1" style="font-size: 0.75rem;">[[ h < 10 ? '0'+h : h ]]:00 - [[ (h+2) < 10 ? '0'+(h+2) : (h+2) ]]:00</span>
-                                            <input type="number" v-model.number="nuevaMateria.desglose.ONLINE_LJ[h]" class="form-control form-control-sm p-1 text-center border-success" style="width: 50px;" min="0">
+                                        <div v-for="h in [7, 9, 11, 13, 15, 17, 19]" :key="'olj'+h" class="mb-1 d-flex justify-content-between align-items-center border-bottom pb-1">
+                                            <span style="font-size: 0.90rem;">[[ h < 10 ? '0'+h : h ]]:00 - [[ (h+2) < 10 ? '0'+(h+2) : (h+2) ]]:00</span>
+                                            <input type="number" v-model.number="nuevaMateria.desglose.ONLINE_LJ[h]" class="form-control form-control-sm p-1 text-center border-success" style="width: 40px;" min="0">
                                         </div>
                                     </div>
                                 </div>
@@ -67,9 +87,9 @@
                                 <div class="col-md-4">
                                     <div class="p-2 bg-light border rounded h-100">
                                         <h6 class="fw-bold text-center text-primary mb-2" style="font-size: 0.8rem;">📅 Virtual<br>(Sábado)</h6>
-                                        <div class="mb-2 d-flex justify-content-between align-items-center border-bottom pb-1">
-                                            <span class="mb-1" style="font-size: 0.75rem;">08:00 - 17:00</span>
-                                            <input type="number" v-model.number="nuevaMateria.desglose.ONLINE_FDS[8]" class="form-control form-control-sm p-1 text-center border-primary" style="width: 50px;" min="0">
+                                        <div class="mb-1 d-flex justify-content-between align-items-center border-bottom pb-1">
+                                            <span style="font-size: 0.90rem;">08:00 - 17:00</span>
+                                            <input type="number" v-model.number="nuevaMateria.desglose.ONLINE_FDS[8]" class="form-control form-control-sm p-1 text-center border-primary" style="width: 40px;" min="0">
                                         </div>
                                     </div>
                                 </div>
@@ -79,7 +99,7 @@
                         </form>
                     </div>
 
-                    <div class="card shadow-sm border-secondary bg-light mb-3">
+                    <div class="card shadow-sm border-secondary bg-light mt-3">
                         <div class="card-body p-3">
                             <h6 class="fw-bold text-secondary">ℹ️ Referencia de Niveles</h6>
                             <ul class="list-unstyled small mb-0">
@@ -112,9 +132,18 @@
                                     <td class="fw-bold">[[ m.nombre ]]</td>
                                     <td><span class="badge bg-secondary">Nivel [[ m.nivel ]]</span></td>
                                     
-                                    <td class="text-center fw-bold">[[ m.cantidad_regular ]]</td>
-                                    <td class="text-center text-success fw-bold">[[ m.cantidad_online_lj ]]</td>
-                                    <td class="text-center text-primary fw-bold">[[ m.cantidad_online_fds ]]</td>
+                                    <td class="text-center fw-bold td-tooltip" 
+                                        :data-tippy-content="getTooltip(m.desglose, 'PRESENCIAL')">
+                                        [[ m.cantidad_regular ]]
+                                    </td>
+                                    <td class="text-center text-success fw-bold td-tooltip"
+                                        :data-tippy-content="getTooltip(m.desglose, 'ONLINE_LJ')">
+                                        [[ m.cantidad_online_lj ]]
+                                    </td>
+                                    <td class="text-center text-primary fw-bold td-tooltip"
+                                        :data-tippy-content="getTooltip(m.desglose, 'ONLINE_FDS')">
+                                        [[ m.cantidad_online_fds ]]
+                                    </td>
                                     
                                     <td class="text-end"><button @click="borrarMateria(m.id)" class="btn btn-sm btn-danger">🗑️</button></td>
                                 </tr>
@@ -250,8 +279,49 @@
                 return total;
             }
         },
-        mounted() { this.cargarTodo(); },
+        mounted() { 
+            this.cargarTodo(); 
+        },
+        updated() {
+            this.$nextTick(() => {
+                // Reiniciar tippy con tema custom para evitar sobreposición
+                tippy('.td-tooltip', {
+                    allowHTML: true,
+                    theme: 'custom',
+                    placement: 'top'
+                });
+            });
+        },
         methods: {
+            getTooltip(desglose, tipo) {
+                if (!desglose || !desglose[tipo]) return 'Sin datos';
+                let html = '';
+                const entries = Object.entries(desglose[tipo]);
+                entries.sort((a, b) => parseInt(a[0]) - parseInt(b[0]));
+                
+                let hasData = false;
+                entries.forEach(([hora, cant]) => {
+                    if (cant > 0) {
+                        hasData = true;
+                        const h = parseInt(hora);
+                        let rango = "";
+                        
+                        if (tipo === 'ONLINE_FDS') {
+                            rango = "08:00 - 17:00";
+                        } else {
+                            const hStr = h < 10 ? '0' + h : h;
+                            const hEnd = h + 2;
+                            const hEndStr = hEnd < 10 ? '0' + hEnd : hEnd;
+                            rango = `${hStr}:00 - ${hEndStr}:00`;
+                        }
+                        // Formato solicitado: Rango Cantidad
+                        html += `<div>${rango} &nbsp; <strong>${cant}</strong></div>`;
+                    }
+                });
+                
+                return hasData ? html : 'Sin cursos';
+            },
+
             showSuccess(msg) { Swal.fire({ icon: 'success', title: '¡Listo!', text: msg, timer: 1500, showConfirmButton: false }); },
             showError(msg) { Swal.fire({ icon: 'error', title: 'Error', text: msg }); },
             async confirmDelete() {
