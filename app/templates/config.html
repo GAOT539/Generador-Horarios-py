@@ -47,9 +47,9 @@
                                 <div class="col-md-4">
                                     <div class="p-2 bg-light border rounded h-100">
                                         <h6 class="fw-bold text-center text-dark mb-2" style="font-size: 0.8rem;">🏫 Presencial<br>(Lunes-Jueves)</h6>
-                                        <div v-for="h in [7, 9, 11, 13, 15, 17, 19]" :key="'p'+h" class="mb-1 d-flex justify-content-between align-items-center">
+                                        <div v-for="h in [7, 9, 11, 13, 15, 17, 19]" :key="'p'+h" class="mb-1 d-flex justify-content-between align-items-center justify-content-center border-bottom pb-1">
                                             <span class="mb-1" style="font-size: 0.75rem;">[[ h < 10 ? '0'+h : h ]]:00 - [[ (h+2) < 10 ? '0'+(h+2) : (h+2) ]]:00</span>
-                                            <input type="number" v-model.number="nuevaMateria.desglose.PRESENCIAL[h]" class="form-control form-control-sm p-1 text-center" style="width: 40px;" min="0">
+                                            <input type="number" v-model.number="nuevaMateria.desglose.PRESENCIAL[h]" class="form-control form-control-sm p-1 text-center" style="width: 50px;" min="0">
                                         </div>
                                     </div>
                                 </div>
@@ -57,24 +57,19 @@
                                 <div class="col-md-4">
                                     <div class="p-2 bg-light border rounded h-100">
                                         <h6 class="fw-bold text-center text-success mb-2" style="font-size: 0.8rem;">💻 Virtual<br>(Lunes-Jueves)</h6>
-                                        <div v-for="h in [7, 9, 11, 13, 15, 17, 19]" :key="'olj'+h" class="mb-1 d-flex justify-content-between align-items-center">
+                                        <div v-for="h in [7, 9, 11, 13, 15, 17, 19]" :key="'olj'+h" class="mb-1 d-flex justify-content-between align-items-center justify-content-center border-bottom pb-1">
                                             <span class="mb-1" style="font-size: 0.75rem;">[[ h < 10 ? '0'+h : h ]]:00 - [[ (h+2) < 10 ? '0'+(h+2) : (h+2) ]]:00</span>
-                                            <input type="number" v-model.number="nuevaMateria.desglose.ONLINE_LJ[h]" class="form-control form-control-sm p-1 text-center border-success" style="width: 40px;" min="0">
+                                            <input type="number" v-model.number="nuevaMateria.desglose.ONLINE_LJ[h]" class="form-control form-control-sm p-1 text-center border-success" style="width: 50px;" min="0">
                                         </div>
                                     </div>
                                 </div>
 
                                 <div class="col-md-4">
                                     <div class="p-2 bg-light border rounded h-100">
-                                        <h6 class="fw-bold text-center text-primary mb-2" style="font-size: 0.8rem;">📅 Virtual<br>(Sáb/Dom)</h6>
-                                        <div class="mb-1 d-flex justify-content-between align-items-center">
-                                            <span>08:00-17:00</span>
-                                            <input type="number" v-model.number="nuevaMateria.desglose.ONLINE_FDS[7]" class="form-control form-control-sm p-1 text-center border-primary" style="width: 40px;" min="0">
-                                        </div>
-                                        <div class="mb-1 d-flex justify-content-between align-items-center">
-                                            <span>11-15</span>
-                                            <!-- eliminar esta opcion y dejar solo 08-17 -->
-                                            <input type="number" v-model.number="nuevaMateria.desglose.ONLINE_FDS[11]" class="form-control form-control-sm p-1 text-center border-primary" style="width: 40px;" min="0">
+                                        <h6 class="fw-bold text-center text-primary mb-2" style="font-size: 0.8rem;">📅 Virtual<br>(Sábado)</h6>
+                                        <div class="mb-2 d-flex justify-content-between align-items-center border-bottom pb-1">
+                                            <span class="mb-1" style="font-size: 0.75rem;">08:00 - 17:00</span>
+                                            <input type="number" v-model.number="nuevaMateria.desglose.ONLINE_FDS[8]" class="form-control form-control-sm p-1 text-center border-primary" style="width: 50px;" min="0">
                                         </div>
                                     </div>
                                 </div>
@@ -223,14 +218,13 @@
         data() {
             return {
                 materias_list: [], profesores_list: [],
-                // NUEVA ESTRUCTURA DE MATERIA
                 nuevaMateria: { 
                     nombre: '', 
                     nivel: 1, 
                     desglose: {
                         PRESENCIAL: {7:0, 9:0, 11:0, 13:0, 15:0, 17:0, 19:0},
                         ONLINE_LJ: {7:0, 9:0, 11:0, 13:0, 15:0, 17:0, 19:0},
-                        ONLINE_FDS: {7:0, 11:0}
+                        ONLINE_FDS: {8:0}
                     }
                 },
                 formProfe: { nombre: '', max_horas_dia: 6, materias_ids: [] }
@@ -288,16 +282,13 @@
                 });
                 
                 if (res.ok) { 
-                    // Resetear formulario
                     this.nuevaMateria.nombre = '';
                     this.nuevaMateria.nivel = 1;
-                    // Resetear valores de matriz a 0
                     Object.keys(this.nuevaMateria.desglose).forEach(k => {
                         Object.keys(this.nuevaMateria.desglose[k]).forEach(h => {
                             this.nuevaMateria.desglose[k][h] = 0;
                         });
                     });
-                    
                     this.cargarTodo(); 
                     this.showSuccess('Materia guardada con desglose horario'); 
                 } else { 

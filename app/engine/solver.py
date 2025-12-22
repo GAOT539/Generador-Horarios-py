@@ -22,7 +22,7 @@ def generar_horario_automatico():
         # ==========================================
         # FASE 1: PREPARACIÓN Y GENERACIÓN DE INSTANCIAS
         # ==========================================
-        print("--- 1. Limpiando y Generando Cursos basados en Demanda ---")
+        logger.info("--- 1. Limpiando y Generando Cursos basados en Demanda ---")
         
         with db.atomic():
             Horario.delete().execute()
@@ -33,7 +33,6 @@ def generar_horario_automatico():
             return {"status": "error", "message": "No hay materias configuradas."}
 
         # Lista maestra para el solver: Tuplas (ObjetoCurso, ObjetoMateria)
-        # Necesitamos guardar la materia en memoria porque Curso ya no tiene FK directa en este paso
         cursos_a_asignar = []
 
         with db.atomic():
@@ -79,7 +78,7 @@ def generar_horario_automatico():
                         cursos_a_asignar.append({'curso': nuevo_curso, 'materia': m})
                         idx_curso += 1
 
-                # 1.3 Procesar ONLINE FDS (Sábado y Domingo, Bloques de 4h)
+                # 1.3 Procesar ONLINE FDS (Solo Sábado)
                 for hora_str, cantidad in desglose.get("ONLINE_FDS", {}).items():
                     cant = int(cantidad)
                     hora = int(hora_str)
@@ -90,7 +89,7 @@ def generar_horario_automatico():
                             turno='FDS',
                             modalidad='ONLINE_FDS',
                             bloque_horario=hora,
-                            dias_clase='S-D'
+                            dias_clase='S' # Solo Sábado
                         )
                         cursos_a_asignar.append({'curso': nuevo_curso, 'materia': m})
                         idx_curso += 1
@@ -101,23 +100,21 @@ def generar_horario_automatico():
         # ==========================================
         # FASE 2: MODELADO MATEMÁTICO (CP-SAT)
         # ==========================================
-        print(f"--- 2. Configurando Modelo para {len(cursos_a_asignar)} cursos ---")
+        logger.info(f"--- 2. Configurando Modelo para {len(cursos_a_asignar)} cursos ---")
         
         profesores = list(Profesor.select())
         model = cp_model.CpModel()
         
         # Estructuras de datos
-        # asignaciones[(id_curso, id_profe)] = variable_bool
         asignaciones = {} 
         
-        # Para controlar choques: profe_id -> clave_horario -> [lista de vars]
-        # clave_horario ejemplo: "L-J_7" (LunesJueves a las 7)
+        # Para controlar choques
         mapa_choques = {p.id: {} for p in profesores}
         
-        # Para controlar carga horaria: profe_id -> [lista de vars con peso 8h]
+        # Para controlar carga horaria
         mapa_carga = {p.id: [] for p in profesores}
 
-        # Cache de competencias para rapidez: {profe_id: {id_materia1, id_materia2...}}
+        # Cache de competencias
         competencias_cache = {}
         for p in profesores:
             competencias_cache[p.id] = {pm.materia.id for pm in p.competencias}
@@ -144,7 +141,7 @@ def generar_horario_automatico():
                 vars_este_curso.append(var)
                 
                 # Agrupar para validación de choques
-                clave_horario = f"{c.dias_clase}_{c.bloque_horario}" # Ej: L-J_7 o S-D_7
+                clave_horario = f"{c.dias_clase}_{c.bloque_horario}"
                 if clave_horario not in mapa_choques[p.id]:
                     mapa_choques[p.id][clave_horario] = []
                 mapa_choques[p.id][clave_horario].append(var)
@@ -157,27 +154,25 @@ def generar_horario_automatico():
 
         # RESTRICCIONES POR PROFESOR
         for p in profesores:
-            # R2: Cruce de Horarios (Un profe no puede estar en 2 lugares a la vez)
+            # R2: Cruce de Horarios
             for clave, lista_vars in mapa_choques[p.id].items():
                 if len(lista_vars) > 1:
-                    # Si hay varios cursos posibles en el mismo hueco (L-J_7), solo puede tomar 1
                     model.Add(sum(lista_vars) <= 1)
             
             # R3: Carga Horaria Máxima
-            # Asumimos peso estándar de 8 horas por curso (4 días x 2h o 2 días x 4h)
             if mapa_carga[p.id]:
                 model.Add(sum(mapa_carga[p.id]) * 8 <= p.max_horas_semana)
 
         # ==========================================
         # FASE 3: RESOLUCIÓN
         # ==========================================
-        print("--- 3. Ejecutando Solver ---")
+        logger.info("--- 3. Ejecutando Solver ---")
         solver = cp_model.CpSolver()
         solver.parameters.max_time_in_seconds = 60.0
         status = solver.Solve(model)
 
         if status == cp_model.OPTIMAL or status == cp_model.FEASIBLE:
-            print(f"¡Solución encontrada! ({solver.StatusName(status)})")
+            logger.info(f"¡Solución encontrada! ({solver.StatusName(status)})")
             
             count = 0
             with db.atomic():
@@ -193,13 +188,13 @@ def generar_horario_automatico():
                         duracion_bloque = 0
                         
                         if curso.dias_clase == 'L-J':
-                            dias_db = [0, 1, 2, 3] # Lunes, Martes, Miercoles, Jueves
+                            dias_db = [0, 1, 2, 3] # Lunes a Jueves
                             duracion_bloque = 2
-                        elif curso.dias_clase == 'S-D':
-                            dias_db = [5, 6] # Sabado, Domingo
-                            duracion_bloque = 4
+                        elif curso.dias_clase == 'S': # Solo Sábado
+                            dias_db = [5] # Sábado
+                            duracion_bloque = 8 # Duración interna de 8h (08:00 a 16:00)
                         
-                        # Guardar en tabla Horario (Desglosado por día para el calendario)
+                        # Guardar en tabla Horario
                         for dia_num in dias_db:
                             Horario.create(
                                 dia=dia_num,
@@ -211,7 +206,7 @@ def generar_horario_automatico():
                             )
                         count += 1
             
-            print(f"--- Proceso Finalizado. {count} cursos asignados. ---")
+            logger.info(f"--- Proceso Finalizado. {count} cursos asignados. ---")
             return {"status": "ok", "message": f"Horario generado exitosamente. {count} cursos asignados."}
         
         elif status == cp_model.INFEASIBLE:
