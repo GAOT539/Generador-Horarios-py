@@ -3,6 +3,7 @@ from app.database import db
 import logging
 from logging.handlers import RotatingFileHandler
 import os
+# IMPORTANTE: Importar modelos para poder crear las tablas
 from app.models import Profesor, Materia, Curso, Horario, ProfesorMateria
 
 def create_app():
@@ -35,8 +36,7 @@ def create_app():
     finally:
         if not db.is_closed():
             db.close()
-    
-    # --- GESTIÓN DE CONEXIONES A LA BASE DE DATOS ---
+
     @app.before_request
     def before_request():
         if db.is_closed():
