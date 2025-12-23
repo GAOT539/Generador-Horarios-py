@@ -284,7 +284,6 @@
         },
         updated() {
             this.$nextTick(() => {
-                // Reiniciar tippy con tema custom para evitar sobreposición
                 tippy('.td-tooltip', {
                     allowHTML: true,
                     theme: 'custom',
@@ -314,7 +313,6 @@
                             const hEndStr = hEnd < 10 ? '0' + hEnd : hEnd;
                             rango = `${hStr}:00 - ${hEndStr}:00`;
                         }
-                        // Formato solicitado: Rango Cantidad
                         html += `<div>${rango} &nbsp; <strong>${cant}</strong></div>`;
                     }
                 });

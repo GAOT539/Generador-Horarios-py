@@ -43,7 +43,7 @@ def generar_horario_automatico():
                     logger.error(f"Error leyendo JSON de materia {m.nombre}")
                     continue
                 
-                idx_curso = 0 # Para generar letras A, B, C...
+                idx_curso = 0 
 
                 # 1.1 Procesar PRESENCIAL (Lunes a Jueves, Bloques de 2h)
                 for hora_str, cantidad in desglose.get("PRESENCIAL", {}).items():
@@ -78,7 +78,7 @@ def generar_horario_automatico():
                         cursos_a_asignar.append({'curso': nuevo_curso, 'materia': m})
                         idx_curso += 1
 
-                # 1.3 Procesar ONLINE FDS (Solo Sábado)
+                # 1.3 Procesar ONLINE FDS (Solo Sábado, Bloque único 8h)
                 for hora_str, cantidad in desglose.get("ONLINE_FDS", {}).items():
                     cant = int(cantidad)
                     hora = int(hora_str)
@@ -105,26 +105,23 @@ def generar_horario_automatico():
         profesores = list(Profesor.select())
         model = cp_model.CpModel()
         
-        # Estructuras de datos
         asignaciones = {} 
         
-        # Para controlar choques
+        # Estructuras de control
         mapa_choques = {p.id: {} for p in profesores}
         
-        # Para controlar carga horaria
-        mapa_carga = {p.id: [] for p in profesores}
+        # CORRECCIÓN: Separamos carga semanal (total) y carga diaria (solo L-J)
+        carga_semanal = {p.id: [] for p in profesores}
+        carga_diaria_lj = {p.id: [] for p in profesores}
 
-        # Cache de competencias
         competencias_cache = {}
         for p in profesores:
             competencias_cache[p.id] = {pm.materia.id for pm in p.competencias}
 
-        # CREACIÓN DE VARIABLES Y RESTRICCIONES BÁSICAS
         for item in cursos_a_asignar:
             c = item['curso']
             m = item['materia']
             
-            # Buscar candidatos (Profes que sepan la materia)
             candidatos = [p for p in profesores if m.id in competencias_cache[p.id]]
             
             if not candidatos:
@@ -135,33 +132,43 @@ def generar_horario_automatico():
             vars_este_curso = []
             
             for p in candidatos:
-                # Variable principal: ¿El profe P da el curso C?
                 var = model.NewBoolVar(f'c{c.id}_p{p.id}')
                 asignaciones[(c.id, p.id)] = var
                 vars_este_curso.append(var)
                 
-                # Agrupar para validación de choques
+                # Choques
                 clave_horario = f"{c.dias_clase}_{c.bloque_horario}"
                 if clave_horario not in mapa_choques[p.id]:
                     mapa_choques[p.id][clave_horario] = []
                 mapa_choques[p.id][clave_horario].append(var)
                 
-                # Agrupar para carga horaria (Cada curso = 8 horas semanales aprox)
-                mapa_carga[p.id].append(var)
+                # Carga Semanal (Todos los cursos suman 8 horas a la semana)
+                # L-J: 2h * 4 dias = 8h
+                # S: 8h * 1 dia = 8h
+                carga_semanal[p.id].append(var)
 
-            # R1: Todo curso debe tener EXACTAMENTE un profesor
+                # Carga Diaria (Solo cursos L-J suman horas al día laboral)
+                if c.dias_clase == 'L-J':
+                    carga_diaria_lj[p.id].append(var)
+
             model.Add(sum(vars_este_curso) == 1)
 
         # RESTRICCIONES POR PROFESOR
         for p in profesores:
-            # R2: Cruce de Horarios
+            # 1. Evitar Choques
             for clave, lista_vars in mapa_choques[p.id].items():
                 if len(lista_vars) > 1:
                     model.Add(sum(lista_vars) <= 1)
             
-            # R3: Carga Horaria Máxima
-            if mapa_carga[p.id]:
-                model.Add(sum(mapa_carga[p.id]) * 8 <= p.max_horas_semana)
+            # 2. Carga Semanal Máxima (32h)
+            if carga_semanal[p.id]:
+                model.Add(sum(carga_semanal[p.id]) * 8 <= p.max_horas_semana)
+
+            # 3. Carga Diaria Máxima (Solo Lunes a Jueves)
+            # Cada curso L-J aporta 2 horas al día
+            if carga_diaria_lj[p.id]:
+                model.Add(sum(carga_diaria_lj[p.id]) * 2 <= p.max_horas_dia)
+            # NOTA: Los cursos de Sábado ('S') NO entran en esta restricción diaria
 
         # ==========================================
         # FASE 3: RESOLUCIÓN
@@ -178,23 +185,20 @@ def generar_horario_automatico():
             with db.atomic():
                 for (c_id, p_id), var in asignaciones.items():
                     if solver.Value(var) == 1:
-                        # Recuperar datos originales de la lista
                         item = next(x for x in cursos_a_asignar if x['curso'].id == c_id)
                         curso = item['curso']
                         materia = item['materia']
                         
-                        # Determinar días y duración según el tipo de curso
                         dias_db = []
                         duracion_bloque = 0
                         
                         if curso.dias_clase == 'L-J':
-                            dias_db = [0, 1, 2, 3] # Lunes a Jueves
+                            dias_db = [0, 1, 2, 3] 
                             duracion_bloque = 2
-                        elif curso.dias_clase == 'S': # Solo Sábado
+                        elif curso.dias_clase == 'S': 
                             dias_db = [5] # Sábado
-                            duracion_bloque = 8 # Duración interna de 8h (08:00 a 16:00)
+                            duracion_bloque = 8 # 08:00 a 16:00 interno
                         
-                        # Guardar en tabla Horario
                         for dia_num in dias_db:
                             Horario.create(
                                 dia=dia_num,
@@ -206,11 +210,12 @@ def generar_horario_automatico():
                             )
                         count += 1
             
-            logger.info(f"--- Proceso Finalizado. {count} cursos asignados. ---")
-            return {"status": "ok", "message": f"Horario generado exitosamente. {count} cursos asignados."}
+            msg = f"Horario generado exitosamente. {count} cursos asignados."
+            logger.info(msg)
+            return {"status": "ok", "message": msg}
         
         elif status == cp_model.INFEASIBLE:
-            msg = "Imposible generar horario: Faltan profesores para cubrir la demanda en ciertas franjas horarias."
+            msg = "Imposible generar: No hay suficientes profesores con disponibilidad horaria o de carga para cubrir la demanda."
             logger.error(msg)
             return {"status": "error", "message": msg}
         else:
@@ -219,4 +224,4 @@ def generar_horario_automatico():
     except Exception as e:
         error_detail = traceback.format_exc()
         logger.critical(f"Excepción en solver: {str(e)}\n{error_detail}")
-        return {"status": "error", "message": f"Error interno: {str(e)}"}
+        return {"status": "error", "message": f"Error interno en motor: {str(e)}"}

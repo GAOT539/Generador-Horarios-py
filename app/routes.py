@@ -22,7 +22,7 @@ def config():
 def reportes():
     return render_template('reportes.html')
 
-# --- API MATERIAS (ACTUALIZADA TAREA 2) ---
+# --- API MATERIAS ---
 @bp.route('/api/materias', methods=['GET', 'POST', 'DELETE'])
 def manage_materias():
     if request.method == 'POST':
@@ -171,9 +171,10 @@ def generar():
             return jsonify(resultado), 400
             
     except Exception as e:
-        err_msg = f"Error no controlado en ruta /api/generar: {str(e)}"
+        err_msg = f"Error no controlado en motor: {str(e)}"
         current_app.logger.critical(err_msg + "\n" + traceback.format_exc())
-        return jsonify({"status": "error", "message": "Error interno del servidor. Revise logs."}), 500
+        # CORRECCIÓN: Devolver mensaje específico del error para que Swal lo muestre
+        return jsonify({"status": "error", "message": f"Error interno: {str(e)}"}), 500
 
 # --- API LEER HORARIO ---
 @bp.route('/api/horario', methods=['GET'])
