@@ -173,10 +173,9 @@ def generar():
     except Exception as e:
         err_msg = f"Error no controlado en motor: {str(e)}"
         current_app.logger.critical(err_msg + "\n" + traceback.format_exc())
-        # CORRECCIÓN: Devolver mensaje específico del error para que Swal lo muestre
         return jsonify({"status": "error", "message": f"Error interno: {str(e)}"}), 500
 
-# --- API LEER HORARIO ---
+# --- API LEER HORARIO (MODIFICADA PARA VISUALIZACIÓN FDS) ---
 @bp.route('/api/horario', methods=['GET'])
 def get_horario():
     eventos = []
@@ -193,7 +192,16 @@ def get_horario():
         if h.dia not in fechas_base: continue
         
         start = f"{h.hora_inicio:02d}:00:00"
-        end = f"{h.hora_fin:02d}:00:00"
+        
+        # --- LÓGICA DE VISUALIZACIÓN FDS ---
+        # Si es FDS y el bloque dura 8 horas (08:00-16:00), lo mostramos como 9 horas (08:00-17:00)
+        # solo para efectos visuales en el calendario.
+        if 'FDS' in h.curso.modalidad and (h.hora_fin - h.hora_inicio) == 8:
+            hora_fin_visual = h.hora_fin + 1
+        else:
+            hora_fin_visual = h.hora_fin
+            
+        end = f"{hora_fin_visual:02d}:00:00"
         
         # --- FORMATO Y COLORES ---
         mod_tag = ""

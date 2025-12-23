@@ -52,7 +52,7 @@
                 <input type="radio" class="btn-check" name="modview" id="viewAll" value="ALL" v-model="vistaModalidad" @change="limpiarFiltrosSecundarios" checked>
                 <label class="btn btn-outline-primary" for="viewAll">Todos</label>
 
-                <input type="radio" class="btn-check" name="modview" id="viewReg" value="REGULAR" v-model="vistaModalidad" @change="limpiarFiltrosSecundarios">
+                <input type="radio" class="btn-check" name="modview" id="viewReg" value="PRESENCIAL" v-model="vistaModalidad" @change="limpiarFiltrosSecundarios">
                 <label class="btn btn-outline-success" for="viewReg">🏫 Presencial</label>
 
                 <input type="radio" class="btn-check" name="modview" id="viewOnl" value="ONLINE" v-model="vistaModalidad" @change="limpiarFiltrosSecundarios">
@@ -147,7 +147,7 @@
             eventosBaseModalidad() {
                 if (this.vistaModalidad === 'ALL') return this.allEvents;
                 return this.allEvents.filter(e => {
-                    if (this.vistaModalidad === 'REGULAR') return e.extendedProps.modalidad === 'REGULAR';
+                    if (this.vistaModalidad === 'PRESENCIAL') return e.extendedProps.modalidad === 'PRESENCIAL';
                     if (this.vistaModalidad === 'ONLINE') return e.extendedProps.modalidad.includes('ONLINE');
                     return true;
                 });
@@ -231,7 +231,7 @@
             iniciarCalendario() {
                 var calendarEl = document.getElementById('calendar');
                 this.calendar = new FullCalendar.Calendar(calendarEl, {
-                    initialView: 'timeGridWeek',
+                    initialView: 'listWeek', // CAMBIO: Vista por defecto lista semanal
                     locale: 'es',
                     firstDay: 1, 
                     initialDate: '2023-11-20',
@@ -282,45 +282,6 @@
                     }
                 });
                 this.calendar.render();
-            },
-
-            // --- LÓGICA MODIFICADA PARA MOSTRAR ERRORES ESPECÍFICOS ---
-            async generarHorario() {
-                const confirm = await Swal.fire({
-                    title: '¿Generar nuevo horario?',
-                    text: "Se borrará el horario actual.",
-                    icon: 'warning',
-                    showCancelButton: true,
-                    confirmButtonText: 'Sí, generar'
-                });
-
-                if (confirm.isConfirmed) {
-                    this.loading = true;
-                    try {
-                        const res = await fetch('/api/generar', {method: 'POST'});
-                        const data = await res.json(); // Leer respuesta completa
-
-                        if (!res.ok) {
-                            // Si hay error (status 400/500), lanzar el mensaje que viene del backend
-                            throw new Error(data.message || "Error desconocido al generar.");
-                        }
-
-                        // Si todo bien
-                        await this.cargarDatos(); 
-                        Swal.fire('¡Éxito!', data.message || 'Horario generado', 'success');
-
-                    } catch (e) {
-                        // Mostrar mensaje de error específico en pantalla
-                        Swal.fire({
-                            title: 'Error de Generación',
-                            text: e.message, // Aquí se verá: "No existen profesores asignados..."
-                            icon: 'error',
-                            confirmButtonText: 'Entendido'
-                        });
-                    } finally {
-                        this.loading = false;
-                    }
-                }
             }
         }
     }).mount('#app')
