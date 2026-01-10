@@ -143,4 +143,4 @@ school-scheduler-ortools/
 ## ⚠️ Notas Técnicas
 
 * **Base de Datos**: Utiliza SQLite (`data/horarios.db`). Se reinicia automáticamente al generar un nuevo horario (los datos de configuración persisten, las asignaciones se recalculan).
-* **Solver**: Utiliza Google OR-Tools. El tiempo límite de búsqueda está configurado a 120 segundos por defecto.
+* **Solver**: Utiliza Google OR-Tools. El tiempo límite de búsqueda está configurado a 70 segundos por defecto.
