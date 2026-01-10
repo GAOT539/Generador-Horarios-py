@@ -1,84 +1,107 @@
-# 📅 Generador de Horarios Escolares Automatizado
+# Generador de Horarios Académicos Automatizado
 
-Sistema de escritorio desarrollado en Python para la generación automática y optimizada de horarios académicos. Utiliza inteligencia artificial (Constraint Programming) para asegurar que no existan choques de horarios, aulas o profesores, respetando estrictas reglas pedagógicas.
+Sistema web inteligente desarrollado en Python (Flask) para la planificación y optimización de horarios académicos. Utiliza Programación por Restricciones (CP-SAT de Google OR-Tools) para asignar profesores a cursos basándose en demanda, competencias y reglas de negocio estrictas.
 
-## 🛠 Tecnologías Utilizadas
+## 🚀 Características Principales
 
-| Componente                 | Tecnología                    | Por qué se eligió                                                          |
-| :------------------------- | :----------------------------- | :--------------------------------------------------------------------------- |
-| **Lenguaje Backend** | **Python 3.12**          | Líder mundial en ciencia de datos y librerías de optimización.            |
-| **Framework Web**    | **Flask**                | Ligero, modular y excelente compatibilidad para convertir en `.exe`.       |
-| **Base de Datos**    | **SQLite + Peewee**      | Almacenamiento local (archivo único), sin instalar servidores complejos.    |
-| **Algoritmo**        | **Google OR-Tools**      | Motor matemático de Google para resolver problemas de restricción (CSP).   |
-| **Frontend**         | **Vue.js 3 + Bootstrap** | Interfaz reactiva y moderna sin necesidad de compilación Node.js (Offline). |
-| **Visualización**   | **FullCalendar**         | Estándar de la industria para visualizar agendas y cronogramas.             |
-| **Empaquetado**      | **PyInstaller**          | Convierte todo el código Python en un solo ejecutable portable.             |
+* **Motor de Asignación Inteligente**: Algoritmo capaz de resolver conflictos complejos de horarios, carga horaria y modalidades.
+* **Gestión de Demanda Matricial**: Interfaz visual para definir la cantidad exacta de cursos necesarios por franja horaria y modalidad.
+* **Validación Previa**: Sistema de detección de errores antes de la ejecución (ej. "Faltan profesores para cubrir la demanda de Inglés Nivel 1 a las 07:00").
+* **Reportes Avanzados**: Generación de estadísticas, gráficos de ocupación, listados completos y horarios individuales en PDF.
+* **Calendario Interactivo**: Visualización gráfica con filtros por modalidad (Presencial/Online) y detalles de clase.
 
 ---
 
-## 📋 Requerimientos y Reglas de Negocio (Lógica del Sistema)
+## ⚙️ Requerimientos y Reglas de Negocio
 
-Este proyecto está diseñado para cumplir estrictamente con las siguientes reglas. **(No olvidar al programar el algoritmo):**
+El núcleo del sistema se basa en un conjunto estricto de reglas que el algoritmo debe cumplir para generar un horario válido y óptimo.
 
-### 1. Estructura Académica
+### 1. Definición de Modalidades y Horarios
 
-* **Materias:** Definidas por nombre (Ej: Inglés, Italiano, Francés).
-* **Cursos y Niveles:** Combinación de letra y nivel (Ej: Nivel 1 - Curso A).
-* **Aulas:** Espacios físicos limitados. El sistema no puede asignar más clases que aulas disponibles. (Se omite aulas)
+El sistema gestiona tres tipos de bloques horarios:
 
-### 2. Jornadas (Turnos)
+* **🏫 Presencial (Lunes a Jueves)**: Bloques de 2 horas.
+  * Franjas: 07:00-09:00, 09:00-11:00, ..., 19:00-21:00.
+* **💻 Online L-J (Lunes a Jueves)**: Bloques de 2 horas (mismas franjas que presencial).
+* **📅 Online FDS (Sábado)**: Bloque intensivo único.
+  * Horario Visual: 08:00 - 17:00.
+  * Carga Interna: Computa como 8 horas de carga laboral.
 
-* **Matutina:** 07:00 AM - 13:00 PM.
-* **Vespertina:** 14:00 PM - 22:00 PM.
-* *Restricción:* Ciertos cursos solo existen en una jornada específica (Ej: Inglés A1 solo es matutino).
+### 2. Restricciones Duras (Hard Constraints)
 
-### 3. Restricciones del Profesor
+Estas reglas son inviolables; si no se pueden cumplir, el sistema no generará el horario e indicará el error.
 
-* **Competencia:** Un profesor **solo** puede ser asignado a materias que tiene registradas en su perfil. (No asignar Matemáticas a un profe de Inglés).
-* **Carga Horaria:**
-  * No exceder el **Máximo de horas por semana**.
-  * No exceder el **Máximo de horas por día**.
-* **Horas Libres:** El sistema debe permitir huecos (horas libres) si es necesario para cuadrar el horario.
+* **Competencia Docente**: Un profesor solo puede ser asignado a materias y niveles para los que está explícitamente habilitado (ej. "Inglés Nivel 3").
+* **Unicidad**: Un profesor no puede estar en dos clases al mismo tiempo.
+* **Carga Horaria Máxima**:
+  * **Semanal**: No exceder el límite configurado por profesor (ej. 32 horas).
+  * **Diaria (L-J)**: No exceder el límite diario (ej. 8 horas) en días laborables. *Nota: La carga del sábado no cuenta para el límite diario, solo para el semanal.*
+* **Regla Crítica de Desplazamiento (Gap 2 Horas)**:
+  * Si un profesor imparte clases **Presenciales** y **Online** en el **mismo día**, es obligatorio que exista un intervalo de **exactamente 2 horas** entre el cambio de modalidad para permitir el traslado.
+  * *Ejemplo Válido*: 07-09 (Online) -> [09-11 Hueco] -> 11-13 (Presencial).
+  * *Ejemplo Inválido*: 07-09 (Online) -> 09-11 (Presencial).
 
-### 4. Reglas Críticas de Asignación (Algoritmo)
+### 3. Objetivos de Optimización (Soft Constraints)
 
-* **Bloques Mínimos:** Las clases deben ser de **mínimo 2 horas consecutivas**. (Prohibido asignar horas sueltas o "huérfanas" de 1 hora).
-* **Anti-Colisión (Aulas):** Un aula no puede tener dos cursos a la misma hora.
-* **Anti-Colisión (Profesores):** Un profesor no puede estar en dos aulas a la misma hora.
-* **Duplicidad:** No se pueden agendar duplicados de la misma materia para el mismo grupo en el mismo horario.
+El sistema busca la "mejor" solución posible basándose en estos criterios de calidad:
+
+* **⚡ Asignación de Carga Óptima**: Se busca maximizar la cantidad de profesores con asignación activa, evitando que docentes queden con 0 horas si hay demanda disponible (distribución equitativa).
+* **🔄 Preferencia de Horarios Consecutivos**: El algoritmo premia la asignación de bloques seguidos (ej. 07-09 y 09-11) para reducir "huecos" innecesarios en la agenda del docente.
+* **⚖️ Prioridad de Modalidad Mixta**: Se penaliza la creación de horarios "Solo Virtuales". El sistema intentará asignar al menos un curso presencial a cada docente si su disponibilidad y competencias lo permiten.
 
 ---
 
-## 🚀 Instalación y Puesta en Marcha
+## 🛠️ Estructura del Proyecto
 
-Sigue estos pasos para ejecutar el proyecto en modo desarrollo en tu máquina local.
+### Backend (Python/Flask)
 
-### 1. Prerrequisitos
+* **`app/models.py`**: Definición de base de datos (SQLite) usando ORM Peewee (Profesores, Materias, Cursos, Horarios).
+* **`app/engine/solver.py`**: **Cerebro del sistema**. Contiene la lógica del solver CP-SAT, las restricciones matemáticas y la función de pre-validación de recursos.
+* **`app/routes.py`**: Endpoints API para la gestión de datos, ejecución del generador y exportación de reportes.
 
-* Tener instalado **Python 3.12** (Asegurarse de marcar "Add to PATH").
-* Sistema Operativo: Windows 10/11 (Recomendado).
+### Frontend (Vue.js + Bootstrap)
 
-### 2. Configuración del Entorno
+* **`config.html`**:
+  * Matriz de inputs para definir la demanda de cursos por hora.
+  * Gestión de profesores con scroll y filtros.
+  * Respaldo y restauración de base de datos (JSON).
+* **`calendario.html`**:
+  * Vista de calendario semanal/lista.
+  * Filtros dinámicos por Modalidad (Presencial/Online), Materia y Profesor.
+* **`reportes.html`**:
+  * Reporte General: Resumen de oferta académica agrupada.
+  * Horarios Completos: Lista detallada.
+  * Estadísticas: Gráficos de ocupación y barras de carga docente (con detalle de competencias).
+  * Horario Individual: Generación de PDF por profesor con agrupación de horas.
 
-```bash
-# 1. Crear entorno virtual
-python -m venv .venv
+---
 
-# 2. Activar entorno
-.venv\Scripts\activate
+## 📦 Instalación y Ejecución
 
-# 3. Actualizar PIP (Importante para compatibilidad)
-python -m pip install --upgrade pip
+1. **Clonar el repositorio**:
 
-# 4. Instalar dependencias
-pip install -r requirements.txt
-```
+   ```bash
+   git clone [https://github.com/tu-usuario/generador-horarios-py.git](https://github.com/tu-usuario/generador-horarios-py.git)
+   cd generador-horarios-py
+   ```
+2. **Crear entorno virtual** (Recomendado):
 
-### 3. Ejecución
+   ```bash
+   python -m venv venv
+   source venv/bin/activate  # En Windows: venv\Scripts\activate
+   ```
+3. **Instalar dependencias**:
 
-```bash
-python run_debug.py
-```
+   ```bash
+   pip install -r requirements.txt
+   ```
+4. **Ejecutar la aplicación**:
+
+   ```bash
+   python run_debug.py
+   ```
+
+   El sistema estará disponible en `http://127.0.0.1:5000`.
 
 ---
 
@@ -101,94 +124,23 @@ school-scheduler-ortools/
 
 ---
 
-## ⚠️ Notas Importantes
+## 📋 Uso del Sistema
 
-* No usar CDNs: todo funciona offline.
-* Si se cambian modelos, borrar `data/horarios.db`.
-* Las horas deben ser las mismas. (luneas a jueves)
-* Se elimino el modulo de Aulas.(Cambio en requerimientos)
-
-**📋 Aclaraciones**
-
-* El sistema asigna a los profesores conforme están enlistados en el panel de profesores (Existe la posibilidad de que un profesor no sea asignado a ningún horario).
-* Los cursos no están balanceados; es decir, no existe la misma cantidad en el horario matutino que en el vespertino.
-
-## 📋 PLAN DE MODIFICACIONES Y NUEVOS REQUERIMIENTOS
-
-### * GESTIÓN DE MODALIDADES EN MATERIAS
+1. **Configuración**:
+   * Vaya a la pestaña **Configuración**.
+   * Cree las **Materias** y defina la demanda (cantidad de cursos) en la matriz de horas.
+   * Registre los **Profesores**, defina sus horas máximas y asigne qué materias/niveles pueden impartir.
+2. **Generación**:
+   * Desde el **Dashboard** (Inicio), haga clic en "Generar Horarios".
+   * El sistema validará primero si hay suficientes recursos. Si falta personal, mostrará un error específico indicando qué materia y hora falla.
+   * Si todo es correcto, el algoritmo optimizará la distribución.
+3. **Visualización y Reportes**:
+   * Revise el resultado en el **Calendario**.
+   * Consulte la carga horaria y descargue los PDF en **Reportes**.
 
 ---
 
-El sistema debe distinguir explícitamente entre dos modalidades académicas:
-   A. PROGRAMA REGULAR (Presencial) - Opción por defecto.
-   B. MODALIDAD EN LÍNEA (Online).
+## ⚠️ Notas Técnicas
 
-- Configuración de la Demanda:
-  En el apartado de configuración de materias, se debe permitir definir la cantidad de cursos por separado para cada modalidad.
-  Ejemplo: "INGLES Nivel 1" puede tener configurado:
-  - 5 cursos para PROGRAMA REGULAR.
-  - 2 cursos para MODALIDAD EN LÍNEA.
-    (Puede existir una materia que solo tenga cursos presenciales, solo online, o ambos).
-
-### * REGLAS DE HORARIOS Y TURNOS
-
----
-
-- Horario Vespertino General:
-  Se ajusta el rango vespertino para operar de 13:00 a 19:00 (1 PM a 7 PM).
-- Distribución de Cursos (Balanceo de Horarios):
-  Se debe evitar agrupar todos los cursos en el primer horario de la mañana. La asignación debe alternar los bloques horarios disponibles.
-  Ejemplo de distribución deseada:
-
-  - Curso 1: Mañana (07:00 - 09:00)
-  - Curso 2: Tarde  (13:00 - 15:00)
-  - Curso 3: Mañana (09:00 - 11:00)
-  - Curso 4: Tarde  (15:00 - 17:00)
-- Preferencia Horaria para MODALIDAD EN LÍNEA:
-  Los cursos online deben priorizar los siguientes bloques:
-
-  - Mañana: 07:00 - 09:00
-  - Noche:  19:00 - 21:00
-- Horarios de Fin de Semana (Exclusivo Online):
-  Si un curso es MODALIDAD EN LÍNEA, debe tener la posibilidad de asignarse a Sábados y Domingos.
-
-  - Restricción: Máximo 4 horas por día en fin de semana.
-  - Bloque permitido: 07:00 a 11:00.
-
-### * REGLAS DE ASIGNACIÓN DOCENTE Y RESTRICCIONES
-
----
-
-- Asignación de Carga Óptima:
-  El algoritmo debe garantizar que ningún profesor quede "Sin Asignación" o con "Baja Carga" si hay demanda disponible, respetando siempre su límite máximo de horas semanales (no exceder bajo ninguna circunstancia).
-- Preferencia de Horarios Consecutivos:
-  El sistema debe priorizar asignar clases seguidas al mismo profesor para evitar huecos innecesarios.
-  Ejemplo ideal:
-
-  - 07:00 a 09:00: (A) Inglés 1
-  - 09:00 a 11:00: (B) Inglés 2
-- REGLA CRÍTICA DE DESPLAZAMIENTO (Gap de 2 Horas):
-  Si un profesor tiene asignados cursos de ambas modalidades (Presencial y Online) en el MISMO DÍA, debe existir obligatoriamente un intervalo mínimo de 2 horas entre el cambio de modalidad para permitir el desplazamiento.
-  Ejemplo:
-
-  - 07:00 - 09:00: MODALIDAD EN LÍNEA (Casa)
-  - [Descanso/Traslado obligatorio de 09:00 a 11:00]
-  - 11:00 - 13:00: PROGRAMA REGULAR (Universidad)
-
-### * VISUALIZACIÓN EN CALENDARIO
-
----
-
-El módulo de calendario debe presentar la información dividida claramente según la modalidad:
-
-- Vista o sección para PROGRAMA REGULAR.
-- Vista o sección para MODALIDAD EN LÍNEA.
-  Esto permitirá identificar rápidamente la carga presencial vs. la virtual.
-
-
-### **Observación**
-
-**(Máximo horas semana):** El algoritmo actual  **no valida explícitamente el máximo de horas semanales dentro del solver** .
-
-Configurar el Solver para que, si el día es Sábado (`dia=5`), trate el bloque como "Indivisible".
-Modificar y asignar cuantos cursos son necesarios en la mañana y en la tarde de forma manual.
+* **Base de Datos**: Utiliza SQLite (`data/horarios.db`). Se reinicia automáticamente al generar un nuevo horario (los datos de configuración persisten, las asignaciones se recalculan).
+* **Solver**: Utiliza Google OR-Tools. El tiempo límite de búsqueda está configurado a 120 segundos por defecto.

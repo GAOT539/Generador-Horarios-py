@@ -374,7 +374,7 @@ def generar_horario_automatico():
         # ==========================================
         logger.info("--- 4. Ejecutando Solver ---")
         solver = cp_model.CpSolver()
-        solver.parameters.max_time_in_seconds = 60.0
+        solver.parameters.max_time_in_seconds = 120.0
         status = solver.Solve(model)
 
         if status == cp_model.OPTIMAL or status == cp_model.FEASIBLE:
