@@ -68,7 +68,7 @@
                                     <div class="p-2 bg-light border rounded h-100">
                                         <h6 class="fw-bold text-center text-dark mb-2" style="font-size: 0.8rem;">🏫 Presencial<br>(Lunes-Jueves)</h6>
                                         <div v-for="h in [7, 9, 11, 13, 15, 17, 19]" :key="'p'+h" class="mb-1 d-flex justify-content-between align-items-center border-bottom pb-1">
-                                            <span style="font-size: 0.90rem;">[[ h < 10 ? '0'+h : h ]]:00 - [[ (h+2) < 10 ? '0'+(h+2) : (h+2) ]]:00</span>
+                                            <span style="font-size: 0.7rem;">[[ h < 10 ? '0'+h : h ]]:00 - [[ (h+2) < 10 ? '0'+(h+2) : (h+2) ]]:00</span>
                                             <input type="number" v-model.number="nuevaMateria.desglose.PRESENCIAL[h]" class="form-control form-control-sm p-1 text-center" style="width: 40px;" min="0">
                                         </div>
                                     </div>
@@ -78,7 +78,7 @@
                                     <div class="p-2 bg-light border rounded h-100">
                                         <h6 class="fw-bold text-center text-success mb-2" style="font-size: 0.8rem;">💻 Virtual<br>(Lunes-Jueves)</h6>
                                         <div v-for="h in [7, 9, 11, 13, 15, 17, 19]" :key="'olj'+h" class="mb-1 d-flex justify-content-between align-items-center border-bottom pb-1">
-                                            <span style="font-size: 0.90rem;">[[ h < 10 ? '0'+h : h ]]:00 - [[ (h+2) < 10 ? '0'+(h+2) : (h+2) ]]:00</span>
+                                            <span style="font-size: 0.7rem;">[[ h < 10 ? '0'+h : h ]]:00 - [[ (h+2) < 10 ? '0'+(h+2) : (h+2) ]]:00</span>
                                             <input type="number" v-model.number="nuevaMateria.desglose.ONLINE_LJ[h]" class="form-control form-control-sm p-1 text-center border-success" style="width: 40px;" min="0">
                                         </div>
                                     </div>
@@ -88,7 +88,7 @@
                                     <div class="p-2 bg-light border rounded h-100">
                                         <h6 class="fw-bold text-center text-primary mb-2" style="font-size: 0.8rem;">📅 Virtual<br>(Sábado)</h6>
                                         <div class="mb-1 d-flex justify-content-between align-items-center border-bottom pb-1">
-                                            <span style="font-size: 0.90rem;">08:00 - 17:00</span>
+                                            <span style="font-size: 0.7rem;">08:00 - 17:00</span>
                                             <input type="number" v-model.number="nuevaMateria.desglose.ONLINE_FDS[8]" class="form-control form-control-sm p-1 text-center border-primary" style="width: 40px;" min="0">
                                         </div>
                                     </div>
@@ -191,21 +191,31 @@
                 </div>
                 
                 <div class="col-md-8">
-                    <table class="table table-striped table-hover">
-                        <thead class="table-light"><tr><th>Nombre</th><th>Max Sem</th><th>Max Dia</th><th>Competencias</th><th>Acción</th></tr></thead>
-                        <tbody>
-                            <tr v-for="p in profesores_list">
-                                <td>[[ p.nombre ]]</td>
-                                <td>[[ p.max_horas_semana ]]</td>
-                                <td>[[ p.max_horas_dia ]]</td>
-                                <td><span class="badge bg-info text-dark">[[ p.materias ]]</span></td>
-                                <td>
-                                    <button @click="editarNombreProfesor(p)" class="btn btn-sm btn-warning me-2">✏️</button>
-                                    <button @click="borrarProfesor(p.id)" class="btn btn-sm btn-danger">🗑️</button>
-                                </td>
-                            </tr>
-                        </tbody>
-                    </table>
+                    <div style="max-height: 600px; overflow-y: auto; border: 1px solid #dee2e6; border-radius: 0.25rem;">
+                        <table class="table table-striped table-hover mb-0">
+                            <thead class="table-light" style="position: sticky; top: 0; z-index: 1;">
+                                <tr>
+                                    <th>Nombre</th>
+                                    <th>Max Sem</th>
+                                    <th>Max Dia</th>
+                                    <th>Competencias</th>
+                                    <th>Acción</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                <tr v-for="p in profesores_list">
+                                    <td>[[ p.nombre ]]</td>
+                                    <td>[[ p.max_horas_semana ]]</td>
+                                    <td>[[ p.max_horas_dia ]]</td>
+                                    <td><span class="badge bg-info text-dark">[[ p.materias ]]</span></td>
+                                    <td>
+                                        <button @click="editarNombreProfesor(p)" class="btn btn-sm btn-warning me-2">✏️</button>
+                                        <button @click="borrarProfesor(p.id)" class="btn btn-sm btn-danger">🗑️</button>
+                                    </td>
+                                </tr>
+                            </tbody>
+                        </table>
+                    </div>
                 </div>
             </div>
         </div>
@@ -253,7 +263,7 @@
                     desglose: {
                         PRESENCIAL: {7:0, 9:0, 11:0, 13:0, 15:0, 17:0, 19:0},
                         ONLINE_LJ: {7:0, 9:0, 11:0, 13:0, 15:0, 17:0, 19:0},
-                        ONLINE_FDS: {8:0}
+                        ONLINE_FDS: {8:0} // Inicio corregido a 8
                     }
                 },
                 formProfe: { nombre: '', max_horas_dia: 6, materias_ids: [] }

@@ -15,6 +15,65 @@ def generar_etiqueta_curso(n):
         n = (n // 26) - 1
     return result
 
+def validar_recursos(cursos, profesores):
+    """
+    Verifica disponibilidad de profesores antes de intentar resolver.
+    Lanza excepción con mensaje detallado si faltan recursos.
+    """
+    # Mapa: Horario -> { (Materia, Nivel): Cantidad_Cursos }
+    demanda_por_slot = {}
+    
+    # Mapa: (Materia, Nivel) -> Horas_Totales_Necesarias
+    demanda_horas_total = {}
+
+    for item in cursos:
+        c = item['curso']
+        m = item['materia']
+        key_horario = f"{c.dias_clase}_{c.bloque_horario}" # Ej: L-J_7
+        
+        # 1. Agrupar por Slot
+        if key_horario not in demanda_por_slot: 
+            demanda_por_slot[key_horario] = {}
+        
+        mat_key = (m.nombre, m.nivel)
+        demanda_por_slot[key_horario][mat_key] = demanda_por_slot[key_horario].get(mat_key, 0) + 1
+
+        # 2. Agrupar Carga Total
+        horas_curso = 8 # Estándar semanal
+        demanda_horas_total[mat_key] = demanda_horas_total.get(mat_key, 0) + horas_curso
+
+    # Validación 1: ¿Hay suficientes profesores competentes en cada slot?
+    for slot, demandas in demanda_por_slot.items():
+        for (nombre_mat, nivel_mat), requeridos in demandas.items():
+            # Contar profesores que saben esta materia
+            # Nota: Esto es un chequeo optimista (Upper Bound). 
+            # Si ni siquiera hay X profesores en total, imposible cubrir X cursos simultáneos.
+            aptos = 0
+            for p in profesores:
+                tiene_comp = any(pm.materia.nombre == nombre_mat and pm.materia.nivel == nivel_mat for pm in p.competencias)
+                if tiene_comp:
+                    aptos += 1
+            
+            if aptos < requeridos:
+                dias, hora = slot.split('_')
+                hora_fmt = f"{hora}:00"
+                raise Exception(f"Imposible generar: No hay suficientes profesores con disponibilidad para cubrir la demanda en {nombre_mat} Nivel {nivel_mat} en el horario {dias} {hora_fmt}. (Se necesitan {requeridos}, hay {aptos} competentes en total).")
+
+    # Validación 2: Carga Total vs Capacidad Total (Heurística por Materia)
+    # Agrupamos capacidad de profes por materia (aprox)
+    # Si un profe da Ingles 1 y 2, sus 32h cuentan para ambos 'pools', es difícil separar exacto.
+    # Pero si la demanda de Ingles 1 es 1000 horas y la capacidad total de todos los de Ingles 1 es 500, fallará.
+    for (nombre_mat, nivel_mat), horas_necesarias in demanda_horas_total.items():
+        capacidad_total_materia = 0
+        for p in profesores:
+             if any(pm.materia.nombre == nombre_mat and pm.materia.nivel == nivel_mat for pm in p.competencias):
+                 capacidad_total_materia += p.max_horas_semana
+        
+        # Este chequeo es muy laxo porque comparte capacidad, pero sirve para casos extremos
+        if capacidad_total_materia < horas_necesarias:
+             raise Exception(f"Imposible generar: La carga horaria solicitada para {nombre_mat} Nivel {nivel_mat} ({horas_necesarias} horas) supera la capacidad máxima combinada de los profesores disponibles ({capacidad_total_materia} horas). Es necesario subir horas a los profesores.")
+
+
 def generar_horario_automatico():
     logger.info("--- Iniciando Motor de Asignación (Horarios Fijos) ---")
     
@@ -98,19 +157,22 @@ def generar_horario_automatico():
             return {"status": "error", "message": "No se crearon cursos. Revise la configuración de demanda en 'Materias'."}
 
         # ==========================================
+        # FASE 1.5: PRE-VALIDACIÓN DE RECURSOS
+        # ==========================================
+        profesores = list(Profesor.select())
+        validar_recursos(cursos_a_asignar, profesores) # Lanza excepción si falla
+
+        # ==========================================
         # FASE 2: MODELADO MATEMÁTICO (CP-SAT)
         # ==========================================
         logger.info(f"--- 2. Configurando Modelo para {len(cursos_a_asignar)} cursos ---")
         
-        profesores = list(Profesor.select())
         model = cp_model.CpModel()
         
         asignaciones = {} 
         
         # Estructuras de control
         mapa_choques = {p.id: {} for p in profesores}
-        
-        # CORRECCIÓN: Separamos carga semanal (total) y carga diaria (solo L-J)
         carga_semanal = {p.id: [] for p in profesores}
         carga_diaria_lj = {p.id: [] for p in profesores}
 
@@ -143,8 +205,6 @@ def generar_horario_automatico():
                 mapa_choques[p.id][clave_horario].append(var)
                 
                 # Carga Semanal (Todos los cursos suman 8 horas a la semana)
-                # L-J: 2h * 4 dias = 8h
-                # S: 8h * 1 dia = 8h
                 carga_semanal[p.id].append(var)
 
                 # Carga Diaria (Solo cursos L-J suman horas al día laboral)
@@ -165,10 +225,8 @@ def generar_horario_automatico():
                 model.Add(sum(carga_semanal[p.id]) * 8 <= p.max_horas_semana)
 
             # 3. Carga Diaria Máxima (Solo Lunes a Jueves)
-            # Cada curso L-J aporta 2 horas al día
             if carga_diaria_lj[p.id]:
                 model.Add(sum(carga_diaria_lj[p.id]) * 2 <= p.max_horas_dia)
-            # NOTA: Los cursos de Sábado ('S') NO entran en esta restricción diaria
 
         # ==========================================
         # FASE 3: RESOLUCIÓN
@@ -215,7 +273,7 @@ def generar_horario_automatico():
             return {"status": "ok", "message": msg}
         
         elif status == cp_model.INFEASIBLE:
-            msg = "Imposible generar: No hay suficientes profesores con disponibilidad horaria o de carga para cubrir la demanda."
+            msg = "Imposible generar: Conflicto complejo de restricciones (Carga/Horario). Intente reducir cursos o añadir profesores."
             logger.error(msg)
             return {"status": "error", "message": msg}
         else:
@@ -224,4 +282,5 @@ def generar_horario_automatico():
     except Exception as e:
         error_detail = traceback.format_exc()
         logger.critical(f"Excepción en solver: {str(e)}\n{error_detail}")
-        return {"status": "error", "message": f"Error interno en motor: {str(e)}"}
+        # Retornamos el mensaje tal cual (validar_recursos lanza mensajes limpios)
+        return {"status": "error", "message": str(e)}

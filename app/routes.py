@@ -28,9 +28,7 @@ def manage_materias():
     if request.method == 'POST':
         data = request.json
         try:
-            # Convertimos el objeto JSON del frontend a string para guardarlo en la BD
             desglose_str = json.dumps(data['desglose'])
-            
             Materia.create(
                 nombre=data['nombre'],
                 nivel=int(data['nivel']),
@@ -52,13 +50,11 @@ def manage_materias():
     materias = Materia.select().order_by(Materia.nombre, Materia.nivel)
     lista = []
     for m in materias:
-        # Recuperamos el desglose. Si es antiguo o falla, usamos default vacío.
         try:
             desglose = json.loads(m.desglose_horarios)
         except:
             desglose = {"PRESENCIAL":{}, "ONLINE_LJ":{}, "ONLINE_FDS":{}}
 
-        # Calculamos totales al vuelo para visualización
         total_reg = sum(desglose.get('PRESENCIAL', {}).values())
         total_on_lj = sum(desglose.get('ONLINE_LJ', {}).values())
         total_on_fds = sum(desglose.get('ONLINE_FDS', {}).values())
@@ -67,11 +63,11 @@ def manage_materias():
             'id': m.id,
             'nombre': m.nombre,
             'nivel': m.nivel,
-            'cantidad_regular': total_reg,     # Calculado para la vista
-            'cantidad_online_lj': total_on_lj, # Calculado para la vista
-            'cantidad_online_fds': total_on_fds, # Calculado para la vista
+            'cantidad_regular': total_reg,
+            'cantidad_online_lj': total_on_lj,
+            'cantidad_online_fds': total_on_fds,
             'nombre_completo': f"{m.nombre} (Nivel {m.nivel})",
-            'desglose': desglose # Enviamos el detalle por si se necesita
+            'desglose': desglose
         })
     return jsonify(lista)
 
@@ -175,13 +171,12 @@ def generar():
         current_app.logger.critical(err_msg + "\n" + traceback.format_exc())
         return jsonify({"status": "error", "message": f"Error interno: {str(e)}"}), 500
 
-# --- API LEER HORARIO (MODIFICADA PARA VISUALIZACIÓN FDS) ---
+# --- API LEER HORARIO ---
 @bp.route('/api/horario', methods=['GET'])
 def get_horario():
     eventos = []
     horarios = Horario.select().join(Materia).switch(Horario).join(Profesor).switch(Horario).join(Curso)
     
-    # Fechas Base (Semana Lunes 20 a Domingo 26)
     fechas_base = { 
         0: '2023-11-20', 1: '2023-11-21', 2: '2023-11-22', 
         3: '2023-11-23', 4: '2023-11-24', 5: '2023-11-25', 
@@ -193,9 +188,6 @@ def get_horario():
         
         start = f"{h.hora_inicio:02d}:00:00"
         
-        # --- LÓGICA DE VISUALIZACIÓN FDS ---
-        # Si es FDS y el bloque dura 8 horas (08:00-16:00), lo mostramos como 9 horas (08:00-17:00)
-        # solo para efectos visuales en el calendario.
         if 'FDS' in h.curso.modalidad and (h.hora_fin - h.hora_inicio) == 8:
             hora_fin_visual = h.hora_fin + 1
         else:
@@ -203,22 +195,20 @@ def get_horario():
             
         end = f"{hora_fin_visual:02d}:00:00"
         
-        # --- FORMATO Y COLORES ---
         mod_tag = ""
-        color = '#3788d8' # Default Azul
+        color = '#3788d8' 
 
         if 'ONLINE' in h.curso.modalidad:
             mod_tag = "[ON]"
             if 'FDS' in h.curso.modalidad:
-                color = '#fd7e14' # Naranja Online FDS
+                color = '#fd7e14' 
             else:
-                color = '#6f42c1' # Morado Online LJ
+                color = '#6f42c1' 
         else:
-            # Presencial
             if h.curso.turno == 'Vespertino':
-                color = '#28a745' # Verde Tarde
+                color = '#28a745' 
             else:
-                color = '#3788d8' # Azul Mañana
+                color = '#3788d8' 
 
         tag_str = f"{mod_tag} " if mod_tag else ""
         titulo = f"{tag_str}{h.materia.nombre} - {h.materia.nivel} ({h.curso.nombre})\n{h.profesor.nombre}"
@@ -265,15 +255,19 @@ def get_estadisticas():
         elif horas_reales > p.max_horas_semana: estado = "SOBRECARGA"
         elif horas_reales < (p.max_horas_semana * 0.5): estado = "SUBUTILIZADO"
 
+        # NUEVO: Obtener competencias para el reporte detallado
+        comps = [f"{pm.materia.nombre} {pm.materia.nivel}" for pm in p.competencias]
+        comp_str = ", ".join(comps)
+
         reporte.append({
             'id': p.id, 'nombre': p.nombre,
             'horas_asignadas': horas_reales, 'horas_maximas': p.max_horas_semana,
             'estado': estado,
+            'competencias': comp_str,
             'porcentaje': round((horas_reales / p.max_horas_semana) * 100, 1) if p.max_horas_semana > 0 else 0
         })
 
-    # 2. Análisis Avanzado (Cursos Únicos)
-    # Agrupar horarios por Curso ID para no contar bloques individuales como cursos distintos
+    # 2. Análisis Avanzado
     cursos_unicos_query = (Horario
                            .select(Horario.curso, Curso.modalidad, Curso.turno, Materia.nombre)
                            .join(Curso, on=(Horario.curso == Curso.id))
@@ -281,17 +275,19 @@ def get_estadisticas():
                            .join(Materia, on=(Horario.materia == Materia.id))
                            .group_by(Horario.curso, Curso.modalidad, Curso.turno, Materia.nombre))
 
-    stats_modalidad = {'REGULAR': 0, 'ONLINE_LJ': 0, 'ONLINE_FDS': 0}
+    # CAMBIO: Usar PRESENCIAL en lugar de REGULAR
+    stats_modalidad = {'PRESENCIAL': 0, 'ONLINE_LJ': 0, 'ONLINE_FDS': 0}
     stats_turno = {'Matutino': 0, 'Vespertino': 0, 'Nocturno': 0, 'FDS': 0}
     stats_materias = {}
 
     for entry in cursos_unicos_query:
         # Modalidad
         mod = entry.curso.modalidad
+        if mod == 'REGULAR': mod = 'PRESENCIAL' # Normalizar si hay datos viejos
+        
         if mod in stats_modalidad:
             stats_modalidad[mod] += 1
         else:
-            # Fallback para modalidades antiguas si existieran
             stats_modalidad[mod] = 1
         
         # Turno
@@ -305,7 +301,6 @@ def get_estadisticas():
         mat_nombre = entry.materia.nombre
         stats_materias[mat_nombre] = stats_materias.get(mat_nombre, 0) + 1
 
-    # Top 5 Materias
     top_materias = sorted(stats_materias.items(), key=lambda x: x[1], reverse=True)[:5]
 
     return jsonify({
@@ -325,7 +320,6 @@ def get_estadisticas():
 @bp.route('/api/backup', methods=['GET'])
 def backup_data():
     try:
-        # Recuperamos materias con su nuevo campo
         materias = list(Materia.select().dicts())
         profesores_data = []
         for p in Profesor.select():
@@ -366,7 +360,6 @@ def restore_data():
             Curso.delete().execute()
 
             for m in data['materias']:
-                # Restauración con soporte para el nuevo campo desglose
                 Materia.create(
                     nombre=m['nombre'], nivel=m['nivel'],
                     desglose_horarios=m.get('desglose_horarios', '{}') 

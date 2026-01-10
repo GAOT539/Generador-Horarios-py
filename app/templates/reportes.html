@@ -217,14 +217,17 @@
                     <div class="card shadow-sm">
                         <div class="card-header bg-light fw-bold">Detalle de Carga Horaria Docente</div>
                         <div class="card-body">
-                            <div v-for="p in estadisticas.profesores" :key="p.id" class="mb-3">
+                            <div v-for="p in estadisticas.profesores" :key="p.id" class="mb-3 border-bottom pb-2">
                                 <div class="d-flex justify-content-between mb-1">
-                                    <span class="fw-bold">[[ p.nombre ]]</span>
+                                    <div>
+                                        <span class="fw-bold d-block">[[ p.nombre ]]</span>
+                                        <span class="text-muted small fst-italic">[[ p.competencias ]]</span>
+                                    </div>
                                     <span :class="getEstadoClass(p.estado)">
                                         [[ p.horas_asignadas ]] / [[ p.horas_maximas ]] hrs ([[ p.estado ]])
                                     </span>
                                 </div>
-                                <div class="progress">
+                                <div class="progress" style="height: 8px;">
                                     <div class="progress-bar" role="progressbar" 
                                          :style="{ width: p.porcentaje + '%', backgroundColor: getColorBarra(p.estado) }">
                                     </div>
@@ -270,12 +273,12 @@
                                         <th style="width: 20%;">MARTES</th>
                                         <th style="width: 20%;">MIÉRCOLES</th>
                                         <th style="width: 20%;">JUEVES</th>
-                                        <th style="width: 10%;" class="bg-secondary">SÁB / DOM</th>
+                                        <th style="width: 10%;" class="bg-secondary">SÁBADO</th>
                                     </tr>
                                 </thead>
                                 <tbody>
-                                    <tr v-for="hora in [7,8,9,10,11,12,13,14,15,16,17,18,19,20,21]" :key="hora">
-                                        <td class="fw-bold bg-light">[[ hora ]]:00 - [[ hora + 1 ]]:00</td>
+                                    <tr v-for="hora in [7,9,11,13,15,17,19,21]" :key="hora">
+                                        <td class="fw-bold bg-light">[[ hora ]]:00 - [[ hora + 2 ]]:00</td>
                                         
                                         <td v-for="dia in [0,1,2,3]" :key="dia">
                                             <div v-if="getClaseEnHora(dia, hora)">
@@ -293,13 +296,6 @@
                                                     <span class="badge bg-dark fw-normal" style="font-size: 0.5rem;">SÁB</span> 
                                                     <strong>[[ getClaseEnHora(5, hora).materia ]]</strong>
                                                     <span class="small">([[ getClaseEnHora(5, hora).curso ]])</span>
-                                                </div>
-                                            </div>
-                                            <div v-if="getClaseEnHora(6, hora)">
-                                                <div class="clase-box online">
-                                                    <span class="badge bg-dark fw-normal" style="font-size: 0.5rem;">DOM</span>
-                                                    <strong>[[ getClaseEnHora(6, hora).materia ]]</strong>
-                                                    <span class="small">([[ getClaseEnHora(6, hora).curso ]])</span>
                                                 </div>
                                             </div>
                                         </td>
@@ -628,8 +624,27 @@
                     let dbDay = jsDay === 0 ? 6 : jsDay - 1; 
                     if (dbDay !== diaTarget) return false;
                     const hStart = d.getHours();
-                    const hEnd = new Date(ev.end).getHours();
-                    return horaTarget >= hStart && horaTarget < hEnd; 
+                    // Chequear si la clase empieza en la hora actual o en la hora siguiente (bloque de 2h)
+                    // Si el target es 7, buscamos clases que empiecen a las 7 o a las 8 (aunque 8 no hay en L-J)
+                    // Y que terminen después del inicio del bloque.
+                    // Simplificación: En este sistema los cursos L-J son fijos (7-9, 9-11).
+                    // Así que solo buscamos si hStart coincide con horaTarget
+                    
+                    // Excepción: Sábado (8-17).
+                    // Si horaTarget es 7, sábado empieza a las 8. No se muestra.
+                    // Si sábado empieza a las 8, debería mostrarse en la fila de las 7? No, porque 8 > 7.
+                    // El usuario pidió "Agrupar en 2 horas".
+                    // Si el sábado es de 8 a 17.
+                    // Fila 7-9: Cubre 7 a 9. Sábado empieza 8. Cae aquí.
+                    if (diaTarget === 5) { // Sábado
+                         // Si la clase empieza a las 8, y el bloque es 7-9. ¿8 está entre 7 y 9? Sí.
+                         if (hStart >= horaTarget && hStart < (horaTarget + 2)) return true;
+                         // Si la clase empezó antes y sigue activa (ej: bloque 9-11, clase viene de 8 a 17)
+                         if (hStart < horaTarget && (new Date(ev.end).getHours()) > horaTarget) return true;
+                         return false;
+                    }
+
+                    return hStart === horaTarget; 
                 });
                 if (!clase) return null;
                 const lines = clase.title.split('\n');
