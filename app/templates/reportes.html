@@ -430,7 +430,7 @@
                 finally { this.loading = false; }
             },
 
-            // --- Lógica Reporte Resumido (CORREGIDO FDS UNIFICADO) ---
+            // --- Lógica Reporte Resumido (CORREGIDO FDS = SÁBADO) ---
             procesarReporteGeneral() {
                 const agrupado = {};
                 this.allEvents.forEach(ev => {
@@ -450,19 +450,16 @@
                     let textoHorario = "";
                     let ordenDia = 0;
 
-                    // CORRECCIÓN: Detectar FDS primero y unificar texto
+                    // CAMBIO: Texto explícito "sábado" (sin domingo)
                     if (props.modalidad.includes('FDS')) {
-                        textoHorario = `sábado y domingo ${hIniStr} a ${hFinStr}`;
+                        textoHorario = `sábado ${hIniStr} a ${hFinStr}`;
                         ordenDia = 3;
                     } else if (diaSemana >= 1 && diaSemana <= 4) { 
                         textoHorario = `lunes a jueves ${hIniStr} - ${hFinStr}`;
                         ordenDia = 1;
-                    } else if (diaSemana === 6) { // Caso raro si no fuera FDS
+                    } else if (diaSemana === 6) { 
                         textoHorario = `sábado ${hIniStr} a ${hFinStr}`;
                         ordenDia = 3;
-                    } else if (diaSemana === 0) { 
-                        textoHorario = `domingo ${hIniStr} a ${hFinStr}`;
-                        ordenDia = 4;
                     }
 
                     if (!agrupado[nombreMateria]) agrupado[nombreMateria] = {};
@@ -534,10 +531,11 @@
 
             // --- Helpers Generales ---
             getHorarioTexto(start, end, rawMod) {
+                // CAMBIO: Texto "Sábados" (sin Domingos)
                 if (rawMod && rawMod.includes('FDS')) {
                     const hIni = start.getHours().toString().padStart(2, '0') + ":00";
                     const hFin = end.getHours().toString().padStart(2, '0') + ":00";
-                    return `Sábados y Domingos ${hIni} - ${hFin}`;
+                    return `Sábados ${hIni} - ${hFin}`;
                 }
 
                 const dia = start.getDay(); 
@@ -624,26 +622,27 @@
                     let dbDay = jsDay === 0 ? 6 : jsDay - 1; 
                     if (dbDay !== diaTarget) return false;
                     const hStart = d.getHours();
-                    // Chequear si la clase empieza en la hora actual o en la hora siguiente (bloque de 2h)
-                    // Si el target es 7, buscamos clases que empiecen a las 7 o a las 8 (aunque 8 no hay en L-J)
-                    // Y que terminen después del inicio del bloque.
-                    // Simplificación: En este sistema los cursos L-J son fijos (7-9, 9-11).
-                    // Así que solo buscamos si hStart coincide con horaTarget
                     
-                    // Excepción: Sábado (8-17).
-                    // Si horaTarget es 7, sábado empieza a las 8. No se muestra.
-                    // Si sábado empieza a las 8, debería mostrarse en la fila de las 7? No, porque 8 > 7.
-                    // El usuario pidió "Agrupar en 2 horas".
-                    // Si el sábado es de 8 a 17.
-                    // Fila 7-9: Cubre 7 a 9. Sábado empieza 8. Cae aquí.
-                    if (diaTarget === 5) { // Sábado
-                         // Si la clase empieza a las 8, y el bloque es 7-9. ¿8 está entre 7 y 9? Sí.
-                         if (hStart >= horaTarget && hStart < (horaTarget + 2)) return true;
-                         // Si la clase empezó antes y sigue activa (ej: bloque 9-11, clase viene de 8 a 17)
-                         if (hStart < horaTarget && (new Date(ev.end).getHours()) > horaTarget) return true;
-                         return false;
+                    // Lógica para 2 horas
+                    // Sábado (dia 5): Si la clase empieza en la hora, o si está dentro de un rango largo (8h)
+                    if (diaTarget === 5) { 
+                         // Si la clase es larga (08-17), debe aparecer en todas las filas pertinentes (07-09, 09-11...)
+                         // Si horaTarget es 7 (07:00-09:00). Clase 8-17. 8 está en [7,9). OK.
+                         // Si horaTarget es 9 (09:00-11:00). Clase 8-17. 9 está en [8,17). OK.
+                         
+                         const hEnd = new Date(ev.end).getHours();
+                         const bloqueFin = horaTarget + 2;
+                         
+                         // Solapamiento de intervalos: [start, end) vs [bloqueStart, bloqueFin)
+                         // Max(start, bloqueStart) < Min(end, bloqueFin)
+                         const overlapStart = Math.max(hStart, horaTarget);
+                         const overlapEnd = Math.min(hEnd, bloqueFin);
+                         
+                         return overlapStart < overlapEnd;
                     }
 
+                    // Lunes a Jueves (Bloques fijos 2h)
+                    // Asumimos que los bloques de clase coinciden con los bloques de visualización
                     return hStart === horaTarget; 
                 });
                 if (!clase) return null;
