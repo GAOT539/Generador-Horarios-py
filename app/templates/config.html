@@ -128,7 +128,7 @@
                                 </tr>
                             </thead>
                             <tbody>
-                                <tr v-for="m in materias_list">
+                                <tr v-for="m in materias_list" :key="m.id">
                                     <td class="fw-bold">[[ m.nombre ]]</td>
                                     <td><span class="badge bg-secondary">Nivel [[ m.nivel ]]</span></td>
                                     
@@ -203,7 +203,7 @@
                                 </tr>
                             </thead>
                             <tbody>
-                                <tr v-for="p in profesores_list">
+                                <tr v-for="p in profesores_list" :key="p.id">
                                     <td>[[ p.nombre ]]</td>
                                     <td>[[ p.max_horas_semana ]]</td>
                                     <td>[[ p.max_horas_dia ]]</td>
@@ -263,7 +263,7 @@
                     desglose: {
                         PRESENCIAL: {7:0, 9:0, 11:0, 13:0, 15:0, 17:0, 19:0},
                         ONLINE_LJ: {7:0, 9:0, 11:0, 13:0, 15:0, 17:0, 19:0},
-                        ONLINE_FDS: {8:0} // Inicio corregido a 8
+                        ONLINE_FDS: {8:0}
                     }
                 },
                 formProfe: { nombre: '', max_horas_dia: 6, materias_ids: [] }
@@ -331,50 +331,78 @@
             },
 
             showSuccess(msg) { Swal.fire({ icon: 'success', title: '¡Listo!', text: msg, timer: 1500, showConfirmButton: false }); },
-            showError(msg) { Swal.fire({ icon: 'error', title: 'Error', text: msg }); },
+            showError(msg) { Swal.fire({ icon: 'error', title: 'Error detectado', text: msg }); },
             async confirmDelete() {
-                const res = await Swal.fire({ title: '¿Borrar?', icon: 'warning', showCancelButton: true, confirmButtonText: 'Sí', cancelButtonText: 'No' });
+                const res = await Swal.fire({ title: '¿Confirmar borrado?', icon: 'warning', showCancelButton: true, confirmButtonText: 'Sí, borrar', cancelButtonText: 'No, cancelar' });
                 return res.isConfirmed;
             },
             async cargarTodo() {
                 try {
-                    this.materias_list = await (await fetch('/api/materias')).json();
-                    this.profesores_list = await (await fetch('/api/profesores')).json();
-                } catch (e) { console.error(e); }
+                    const resMat = await fetch('/api/materias', { cache: 'no-store' });
+                    if (!resMat.ok) throw new Error("Fallo en red al consultar materias.");
+                    this.materias_list = await resMat.json();
+
+                    const resProf = await fetch('/api/profesores', { cache: 'no-store' });
+                    if (!resProf.ok) throw new Error("Fallo en red al consultar profesores.");
+                    this.profesores_list = await resProf.json();
+                } catch (e) {
+                    this.showError("Problema cargando los datos en tiempo real: " + e.message);
+                }
             },
             
             async crearMateria() {
                 if(!this.nuevaMateria.nombre) return;
                 
                 if(this.totalCursosCalculado === 0) {
-                    this.showError("Debes agregar al menos 1 curso en alguna franja horaria.");
+                    this.showError("Debe agregar obligatoriamente al menos 1 curso en alguna franja horaria.");
                     return;
                 }
 
                 this.nuevaMateria.nombre = this.nuevaMateria.nombre.toUpperCase();
                 
-                const res = await fetch('/api/materias', { 
-                    method: 'POST', 
-                    headers: {'Content-Type': 'application/json'}, 
-                    body: JSON.stringify(this.nuevaMateria) 
-                });
-                
-                if (res.ok) { 
-                    this.nuevaMateria.nombre = '';
-                    this.nuevaMateria.nivel = 1;
-                    Object.keys(this.nuevaMateria.desglose).forEach(k => {
-                        Object.keys(this.nuevaMateria.desglose[k]).forEach(h => {
-                            this.nuevaMateria.desglose[k][h] = 0;
-                        });
+                try {
+                    const res = await fetch('/api/materias', { 
+                        method: 'POST', 
+                        headers: {'Content-Type': 'application/json'}, 
+                        body: JSON.stringify(this.nuevaMateria) 
                     });
-                    this.cargarTodo(); 
-                    this.showSuccess('Materia guardada con desglose horario'); 
-                } else { 
-                    const d = await res.json(); this.showError(d.error); 
+                    
+                    if (res.ok) { 
+                        this.nuevaMateria.nombre = '';
+                        this.nuevaMateria.nivel = 1;
+                        Object.keys(this.nuevaMateria.desglose).forEach(k => {
+                            Object.keys(this.nuevaMateria.desglose[k]).forEach(h => {
+                                this.nuevaMateria.desglose[k][h] = 0;
+                            });
+                        });
+                        await this.cargarTodo(); 
+                        this.showSuccess('Materia ingresada con desglose horario exitosamente'); 
+                    } else { 
+                        const d = await res.json(); 
+                        this.showError(d.error || 'Fallo desconocido al procesar la materia'); 
+                    }
+                } catch (e) {
+                    this.showError("Problema de conexión al procesar el envío de la materia: " + e.message);
                 }
             },
             
-            async borrarMateria(id) { if(await this.confirmDelete()) { await fetch('/api/materias?id='+id, {method:'DELETE'}); this.cargarTodo(); } },
+            async borrarMateria(id) { 
+                if(await this.confirmDelete()) { 
+                    try {
+                        const res = await fetch('/api/materias?id='+id, {method:'DELETE'}); 
+                        if (res.ok) {
+                            await this.cargarTodo(); 
+                            this.showSuccess('Materia eliminada exitosamente');
+                        } else {
+                            const d = await res.json();
+                            this.showError(d.error || 'No fue posible eliminar la materia del servidor');
+                        }
+                    } catch (e) {
+                        this.showError("Problema de conexión al ejecutar el borrado: " + e.message);
+                    }
+                } 
+            },
+            
             validarNombreProfe() { this.formProfe.nombre = this.formProfe.nombre.replace(/[^a-zA-ZñÑáéíóúÁÉÍÓÚ\s]/g, ''); },
             
             async guardarProfesor() {
@@ -391,14 +419,14 @@
                 });
 
                 if (nombresMaterias.size > 1) {
-                    this.showError("Error de Sistema: No se permite asignar más de una materia distinta por profesor.");
+                    this.showError("Lógica restringida: No se permite asignar al profesor más de una materia distinta.");
                     this.formProfe.materias_ids = []; 
                     return;
                 }
 
                 for (const [nombreMateria, niveles] of Object.entries(nivelesPorMateria)) {
                     if (niveles.size > 3) {
-                        this.showError(`Error: El profesor no puede impartir más de 3 niveles de ${nombreMateria}.`);
+                        this.showError(`Lógica restringida: El profesor no se encuentra habilitado para impartir más de 3 niveles de la misma área (${nombreMateria}).`);
                         return;
                     }
                 }
@@ -406,55 +434,87 @@
                 const hDia = this.formProfe.max_horas_dia;
                 const hSem = hDia * 4; 
 
-                if (hDia < 2 || hDia > 20) { this.showError("Horas diarias deben ser entre 2 y 20."); return; }
-                if(this.formProfe.materias_ids.length===0) { this.showError("Selecciona materias"); return; }
+                if (hDia < 2 || hDia > 20) { this.showError("Formato incorrecto: Las horas máximas diarias deben oscilar entre 2 y 20."); return; }
+                if(this.formProfe.materias_ids.length===0) { this.showError("Falta información: Debe seleccionar las áreas o materias que el docente imparte."); return; }
                 
                 this.formProfe.nombre = this.formProfe.nombre.toUpperCase();
                 
                 const payload = { ...this.formProfe, max_horas_semana: hSem };
 
-                const res = await fetch('/api/profesores', { method: 'POST', headers: {'Content-Type': 'application/json'}, body: JSON.stringify(payload) });
-                if(res.ok) { 
-                    this.formProfe.nombre=''; this.formProfe.materias_ids=[]; 
-                    this.cargarTodo(); this.showSuccess('Profesor OK'); 
-                } else { this.showError("Error al guardar"); }
+                try {
+                    const res = await fetch('/api/profesores', { method: 'POST', headers: {'Content-Type': 'application/json'}, body: JSON.stringify(payload) });
+                    if(res.ok) { 
+                        this.formProfe.nombre=''; this.formProfe.materias_ids=[]; 
+                        await this.cargarTodo(); 
+                        this.showSuccess('Profesor registrado exitosamente'); 
+                    } else { 
+                        const d = await res.json();
+                        this.showError(d.error || "Se ha rechazado la grabación del profesor debido a un problema con el sistema."); 
+                    }
+                } catch (e) {
+                    this.showError("Incapacidad para comunicarse con la base de datos: " + e.message);
+                }
             },
 
             async editarNombreProfesor(profesor) {
                 const { value: nuevoNombre } = await Swal.fire({
-                    title: 'Editar Nombre',
+                    title: 'Modificar Nombre del Docente',
                     input: 'text',
                     inputValue: profesor.nombre,
                     showCancelButton: true,
-                    inputValidator: (value) => { if (!value) return 'El nombre no puede estar vacío'; }
+                    inputValidator: (value) => { if (!value) return 'El campo del nombre requiere un valor explícito'; }
                 });
 
                 if (nuevoNombre) {
                     const nombreMayus = nuevoNombre.toUpperCase();
-                    const res = await fetch('/api/profesores/' + profesor.id, {
-                        method: 'PUT',
-                        headers: {'Content-Type': 'application/json'},
-                        body: JSON.stringify({ nombre: nombreMayus })
-                    });
+                    try {
+                        const res = await fetch('/api/profesores/' + profesor.id, {
+                            method: 'PUT',
+                            headers: {'Content-Type': 'application/json'},
+                            body: JSON.stringify({ nombre: nombreMayus })
+                        });
 
-                    if (res.ok) { this.cargarTodo(); this.showSuccess('Nombre actualizado'); } 
-                    else { this.showError('Error al actualizar'); }
+                        if (res.ok) { 
+                            await this.cargarTodo(); 
+                            this.showSuccess('Renombramiento procesado eficazmente'); 
+                        } else { 
+                            const d = await res.json();
+                            this.showError(d.error || 'El sistema rechazó el intento de cambio de nombre'); 
+                        }
+                    } catch (e) {
+                        this.showError("Error técnico en la conexión durante la modificación: " + e.message);
+                    }
                 }
             },
 
-            async borrarProfesor(id) { if(await this.confirmDelete()) { await fetch('/api/profesores/'+id, {method:'DELETE'}); this.cargarTodo(); } },
+            async borrarProfesor(id) { 
+                if(await this.confirmDelete()) { 
+                    try {
+                        const res = await fetch('/api/profesores/'+id, {method:'DELETE'}); 
+                        if (res.ok) {
+                            await this.cargarTodo(); 
+                            this.showSuccess('Docente deshabilitado del sistema completamente');
+                        } else {
+                            const d = await res.json();
+                            this.showError(d.error || 'La petición de borrado ha fracasado en el procesador principal');
+                        }
+                    } catch (e) {
+                        this.showError("La instrucción de borrado encontró un fallo de comunicación: " + e.message);
+                    }
+                } 
+            },
             
             async subirRespaldo() {
                 const file = this.$refs.fileInput.files[0];
                 if (!file) return;
                 
                 const confirm = await Swal.fire({
-                    title: '¿Estás seguro?',
-                    text: "Se borrarán todos los datos actuales y se reemplazarán por el archivo.",
+                    title: 'Peligro: ¿Restablecer datos desde copia?',
+                    text: "Se extinguirán las programaciones y registros existentes sin opción a deshacer.",
                     icon: 'warning',
                     showCancelButton: true,
                     confirmButtonColor: '#d33',
-                    confirmButtonText: 'Sí, restaurar'
+                    confirmButtonText: 'Sí, aplicar sobreescritura estricta'
                 });
                 
                 if (confirm.isConfirmed) {
@@ -465,11 +525,15 @@
                         const res = await fetch('/api/restore', { method: 'POST', body: formData });
                         const data = await res.json();
                         if (res.ok) {
-                            Swal.fire('Restaurado', data.message, 'success');
-                            this.cargarTodo();
+                            Swal.fire('Estructura Reconstruida', data.message, 'success');
+                            await this.cargarTodo();
                             this.$refs.fileInput.value = ''; 
-                        } else { this.showError(data.error); }
-                    } catch (e) { this.showError("Error al subir archivo"); }
+                        } else { 
+                            this.showError(data.error || 'Fallo indeterminado en el transcurso de restauración'); 
+                        }
+                    } catch (e) { 
+                        this.showError("Excepción al intentar cargar el lote de archivos: " + e.message); 
+                    }
                 }
             }
         }

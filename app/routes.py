@@ -22,78 +22,96 @@ def config():
 def reportes():
     return render_template('reportes.html')
 
-# --- API MATERIAS ---
 @bp.route('/api/materias', methods=['GET', 'POST', 'DELETE'])
 def manage_materias():
     if request.method == 'POST':
         data = request.json
         try:
+            nombre_materia = data['nombre'].strip().upper()
+            nivel_materia = int(data['nivel'])
+
+            if Materia.select().where((Materia.nombre == nombre_materia) & (Materia.nivel == nivel_materia)).exists():
+                mensaje_error = f"La materia {nombre_materia} para el Nivel {nivel_materia} ya se encuentra registrada. No se permiten duplicados de nivel en la misma materia."
+                current_app.logger.warning(f"Intento de duplicado de materia: {nombre_materia} Nivel {nivel_materia}")
+                return jsonify({'error': mensaje_error}), 400
+
             desglose_str = json.dumps(data['desglose'])
             Materia.create(
-                nombre=data['nombre'],
-                nivel=int(data['nivel']),
+                nombre=nombre_materia,
+                nivel=nivel_materia,
                 desglose_horarios=desglose_str
             )
             return jsonify({'status': 'ok'})
         except Exception as e:
-            current_app.logger.error(f"Error creando materia: {str(e)}")
-            return jsonify({'error': str(e)}), 400
+            current_app.logger.error(f"Error de código/lógica creando materia. Datos: {data}. Detalle: {str(e)}\nTraza:\n{traceback.format_exc()}")
+            return jsonify({'error': 'No se pudo registrar la materia. Verifique que los datos sean correctos o que no exista un duplicado exacto.'}), 400
             
     if request.method == 'DELETE':
         materia_id = request.args.get('id')
-        with db.atomic():
-            Horario.delete().where(Horario.materia == materia_id).execute()
-            ProfesorMateria.delete().where(ProfesorMateria.materia == materia_id).execute()
-            Materia.delete().where(Materia.id == materia_id).execute()
-        return jsonify({'status': 'ok'})
-
-    materias = Materia.select().order_by(Materia.nombre, Materia.nivel)
-    lista = []
-    for m in materias:
         try:
-            desglose = json.loads(m.desglose_horarios)
-        except:
-            desglose = {"PRESENCIAL":{}, "ONLINE_LJ":{}, "ONLINE_FDS":{}}
+            with db.atomic():
+                Horario.delete().where(Horario.materia == materia_id).execute()
+                ProfesorMateria.delete().where(ProfesorMateria.materia == materia_id).execute()
+                Materia.delete().where(Materia.id == materia_id).execute()
+            return jsonify({'status': 'ok'})
+        except Exception as e:
+            current_app.logger.error(f"Error eliminando materia ID {materia_id}. Detalle: {str(e)}\nTraza:\n{traceback.format_exc()}")
+            return jsonify({'error': 'Error interno al intentar eliminar la materia. Asegúrese de que no tenga dependencias estrictas.'}), 400
 
-        total_reg = sum(desglose.get('PRESENCIAL', {}).values())
-        total_on_lj = sum(desglose.get('ONLINE_LJ', {}).values())
-        total_on_fds = sum(desglose.get('ONLINE_FDS', {}).values())
+    try:
+        materias = Materia.select().order_by(Materia.nombre, Materia.nivel)
+        lista = []
+        for m in materias:
+            try:
+                desglose = json.loads(m.desglose_horarios)
+            except:
+                desglose = {"PRESENCIAL":{}, "ONLINE_LJ":{}, "ONLINE_FDS":{}}
 
-        lista.append({
-            'id': m.id,
-            'nombre': m.nombre,
-            'nivel': m.nivel,
-            'cantidad_regular': total_reg,
-            'cantidad_online_lj': total_on_lj,
-            'cantidad_online_fds': total_on_fds,
-            'nombre_completo': f"{m.nombre} (Nivel {m.nivel})",
-            'desglose': desglose
-        })
-    return jsonify(lista)
+            total_reg = sum(desglose.get('PRESENCIAL', {}).values())
+            total_on_lj = sum(desglose.get('ONLINE_LJ', {}).values())
+            total_on_fds = sum(desglose.get('ONLINE_FDS', {}).values())
 
-# --- API PROFESORES ---
+            lista.append({
+                'id': m.id,
+                'nombre': m.nombre,
+                'nivel': m.nivel,
+                'cantidad_regular': total_reg,
+                'cantidad_online_lj': total_on_lj,
+                'cantidad_online_fds': total_on_fds,
+                'nombre_completo': f"{m.nombre} (Nivel {m.nivel})",
+                'desglose': desglose
+            })
+        return jsonify(lista)
+    except Exception as e:
+        current_app.logger.error(f"Error cargando lista de materias. Detalle: {str(e)}\nTraza:\n{traceback.format_exc()}")
+        return jsonify({'error': 'Fallo al intentar leer las materias desde la base de datos.'}), 500
+
 @bp.route('/api/profesores', methods=['GET'])
 def get_profesores():
-    profes = []
-    for p in Profesor.select():
-        materias_asignadas = [f"{pm.materia.nombre} {pm.materia.nivel}" for pm in p.competencias]
-        profes.append({
-            'id': p.id,
-            'nombre': p.nombre,
-            'max_horas_semana': p.max_horas_semana,
-            'max_horas_dia': p.max_horas_dia,
-            'materias': ", ".join(materias_asignadas)
-        })
-    return jsonify(profes)
+    try:
+        profes = []
+        for p in Profesor.select():
+            materias_asignadas = [f"{pm.materia.nombre} {pm.materia.nivel}" for pm in p.competencias]
+            profes.append({
+                'id': p.id,
+                'nombre': p.nombre,
+                'max_horas_semana': p.max_horas_semana,
+                'max_horas_dia': p.max_horas_dia,
+                'materias': ", ".join(materias_asignadas)
+            })
+        return jsonify(profes)
+    except Exception as e:
+        current_app.logger.error(f"Error al listar profesores. Detalle: {str(e)}\nTraza:\n{traceback.format_exc()}")
+        return jsonify({'error': 'No se pudieron cargar los profesores de la base de datos.'}), 500
 
 @bp.route('/api/profesores', methods=['POST'])
 def create_profesor():
     data = request.json
-    if Profesor.select().where(Profesor.nombre == data['nombre']).exists():
-        return jsonify({'error': f"El profesor {data['nombre']} ya existe."}), 400
+    try:
+        if Profesor.select().where(Profesor.nombre == data['nombre']).exists():
+            return jsonify({'error': f"El profesor {data['nombre']} ya se encuentra registrado en el sistema."}), 400
 
-    with db.atomic():
-        try:
+        with db.atomic():
             p = Profesor.create(
                 nombre=data['nombre'],
                 max_horas_semana=int(data['max_horas_semana']),
@@ -101,10 +119,10 @@ def create_profesor():
             )
             for materia_id in data.get('materias_ids', []):
                 ProfesorMateria.create(profesor=p, materia_id=materia_id)
-            return jsonify({'status': 'ok'})
-        except Exception as e:
-            current_app.logger.error(f"Error creando profesor: {str(e)}")
-            return jsonify({'error': str(e)}), 400
+        return jsonify({'status': 'ok'})
+    except Exception as e:
+        current_app.logger.error(f"Error creando profesor con datos: {data}. Detalle: {str(e)}\nTraza:\n{traceback.format_exc()}")
+        return jsonify({'error': 'Fallo en el sistema al guardar el profesor. Verifique que los campos sean correctos.'}), 400
 
 @bp.route('/api/profesores/<int:id>', methods=['PUT'])
 def update_profesor(id):
@@ -114,8 +132,8 @@ def update_profesor(id):
         query.execute()
         return jsonify({'status': 'ok'})
     except Exception as e:
-        current_app.logger.error(f"Error actualizando profesor {id}: {str(e)}")
-        return jsonify({'error': str(e)}), 400
+        current_app.logger.error(f"Error actualizando profesor ID {id}. Datos: {data}. Detalle: {str(e)}\nTraza:\n{traceback.format_exc()}")
+        return jsonify({'error': 'No se logró actualizar el nombre del profesor en la base de datos.'}), 400
 
 @bp.route('/api/profesores/<int:id>', methods=['DELETE'])
 def delete_profesor(id):
@@ -126,10 +144,9 @@ def delete_profesor(id):
             Profesor.delete().where(Profesor.id == id).execute()
         return jsonify({'status': 'ok'})
     except Exception as e:
-        current_app.logger.error(f"Error eliminando profesor {id}: {str(e)}")
-        return jsonify({'error': f"Error al borrar: {str(e)}"}), 400
+        current_app.logger.error(f"Error eliminando profesor ID {id}. Detalle: {str(e)}\nTraza:\n{traceback.format_exc()}")
+        return jsonify({'error': 'Ocurrió un problema al eliminar el profesor. Podría estar bloqueado por otras dependencias.'}), 400
 
-# --- API CURSOS ---
 @bp.route('/api/cursos', methods=['GET', 'POST', 'DELETE'])
 def manage_cursos():
     if request.method == 'POST':
@@ -142,17 +159,25 @@ def manage_cursos():
                 modalidad=data.get('modalidad', 'REGULAR')
             )
             return jsonify({'status': 'ok'})
-        except Exception:
-            return jsonify({'error': 'Duplicado'}), 400
+        except Exception as e:
+            current_app.logger.error(f"Error al crear curso. Datos: {data}. Detalle: {str(e)}\nTraza:\n{traceback.format_exc()}")
+            return jsonify({'error': 'El curso ya se encuentra registrado o los datos enviados no son válidos.'}), 400
 
     if request.method == 'DELETE':
-        Curso.delete().where(Curso.id == request.args.get('id')).execute()
-        return jsonify({'status': 'ok'})
+        try:
+            Curso.delete().where(Curso.id == request.args.get('id')).execute()
+            return jsonify({'status': 'ok'})
+        except Exception as e:
+            current_app.logger.error(f"Error eliminando curso. Detalle: {str(e)}\nTraza:\n{traceback.format_exc()}")
+            return jsonify({'error': 'No es posible eliminar el curso debido a un error interno.'}), 400
 
-    cursos = Curso.select().order_by(Curso.nivel, Curso.nombre)
-    return jsonify(list(cursos.dicts()))
+    try:
+        cursos = Curso.select().order_by(Curso.nivel, Curso.nombre)
+        return jsonify(list(cursos.dicts()))
+    except Exception as e:
+        current_app.logger.error(f"Error cargando los cursos. Detalle: {str(e)}\nTraza:\n{traceback.format_exc()}")
+        return jsonify({'error': 'Error de conexión al obtener los cursos.'}), 500
 
-# --- API GENERACIÓN ---
 @bp.route('/api/generar', methods=['POST'])
 def generar():
     current_app.logger.info("Solicitud de generación de horario recibida.")
@@ -169,154 +194,152 @@ def generar():
     except Exception as e:
         err_msg = f"Error no controlado en motor: {str(e)}"
         current_app.logger.critical(err_msg + "\n" + traceback.format_exc())
-        return jsonify({"status": "error", "message": f"Error interno: {str(e)}"}), 500
+        return jsonify({"status": "error", "message": "Ocurrió un error crítico durante la generación del algoritmo de horarios."}), 500
 
-# --- API LEER HORARIO ---
 @bp.route('/api/horario', methods=['GET'])
 def get_horario():
-    eventos = []
-    horarios = Horario.select().join(Materia).switch(Horario).join(Profesor).switch(Horario).join(Curso)
-    
-    fechas_base = { 
-        0: '2023-11-20', 1: '2023-11-21', 2: '2023-11-22', 
-        3: '2023-11-23', 4: '2023-11-24', 5: '2023-11-25', 
-        6: '2023-11-26'
-    }
+    try:
+        eventos = []
+        horarios = Horario.select().join(Materia).switch(Horario).join(Profesor).switch(Horario).join(Curso)
+        
+        fechas_base = { 
+            0: '2023-11-20', 1: '2023-11-21', 2: '2023-11-22', 
+            3: '2023-11-23', 4: '2023-11-24', 5: '2023-11-25', 
+            6: '2023-11-26'
+        }
 
-    for h in horarios:
-        if h.dia not in fechas_base: continue
-        
-        start = f"{h.hora_inicio:02d}:00:00"
-        
-        if 'FDS' in h.curso.modalidad and (h.hora_fin - h.hora_inicio) == 8:
-            hora_fin_visual = h.hora_fin + 1
-        else:
-            hora_fin_visual = h.hora_fin
+        for h in horarios:
+            if h.dia not in fechas_base: continue
             
-        end = f"{hora_fin_visual:02d}:00:00"
-        
-        mod_tag = ""
-        color = '#3788d8' 
-
-        if 'ONLINE' in h.curso.modalidad:
-            mod_tag = "[ON]"
-            if 'FDS' in h.curso.modalidad:
-                color = '#fd7e14' 
+            start = f"{h.hora_inicio:02d}:00:00"
+            
+            if 'FDS' in h.curso.modalidad and (h.hora_fin - h.hora_inicio) == 8:
+                hora_fin_visual = h.hora_fin + 1
             else:
-                color = '#6f42c1' 
-        else:
-            if h.curso.turno == 'Vespertino':
-                color = '#28a745' 
+                hora_fin_visual = h.hora_fin
+                
+            end = f"{hora_fin_visual:02d}:00:00"
+            
+            mod_tag = ""
+            color = '#3788d8' 
+
+            if 'ONLINE' in h.curso.modalidad:
+                mod_tag = "[ON]"
+                if 'FDS' in h.curso.modalidad:
+                    color = '#fd7e14' 
+                else:
+                    color = '#6f42c1' 
             else:
-                color = '#3788d8' 
+                if h.curso.turno == 'Vespertino':
+                    color = '#28a745' 
+                else:
+                    color = '#3788d8' 
 
-        tag_str = f"{mod_tag} " if mod_tag else ""
-        titulo = f"{tag_str}{h.materia.nombre} - {h.materia.nivel} ({h.curso.nombre})\n{h.profesor.nombre}"
-        
-        eventos.append({
-            'title': titulo,
-            'start': f"{fechas_base[h.dia]}T{start}",
-            'end': f"{fechas_base[h.dia]}T{end}",
-            'color': color,
-            'extendedProps': {
-                'materia_id': h.materia.id,
-                'profesor_id': h.profesor.id,
-                'curso_turno': h.curso.turno,
-                'modalidad': h.curso.modalidad,
-                'curso_nombre': h.curso.nombre
-            }
-        })
-        
-    return jsonify(eventos)
+            tag_str = f"{mod_tag} " if mod_tag else ""
+            titulo = f"{tag_str}{h.materia.nombre} - {h.materia.nivel} ({h.curso.nombre})\n{h.profesor.nombre}"
+            
+            eventos.append({
+                'title': titulo,
+                'start': f"{fechas_base[h.dia]}T{start}",
+                'end': f"{fechas_base[h.dia]}T{end}",
+                'color': color,
+                'extendedProps': {
+                    'materia_id': h.materia.id,
+                    'profesor_id': h.profesor.id,
+                    'curso_turno': h.curso.turno,
+                    'modalidad': h.curso.modalidad,
+                    'curso_nombre': h.curso.nombre
+                }
+            })
+            
+        return jsonify(eventos)
+    except Exception as e:
+        current_app.logger.error(f"Error procesando lecturas de horarios: {str(e)}\nTraza:\n{traceback.format_exc()}")
+        return jsonify({'error': 'Incapacidad de leer el horario procesado desde la base de datos.'}), 500
 
-# --- API ESTADISTICAS ---
 @bp.route('/api/estadisticas', methods=['GET'])
 def get_estadisticas():
-    # 1. Datos base de profesores
-    asignaciones = Horario.select()
-    profesores = Profesor.select()
-    reporte = []
-    
-    total_capacidad_horas = 0
-    total_horas_asignadas = 0
-
-    for p in profesores:
-        horas_reales = 0
-        mis_horarios = [x for x in asignaciones if x.profesor.id == p.id]
-        for mh in mis_horarios:
-            duracion = mh.hora_fin - mh.hora_inicio
-            horas_reales += duracion
-
-        total_capacidad_horas += p.max_horas_semana
-        total_horas_asignadas += horas_reales
-
-        estado = "OK"
-        if horas_reales == 0: estado = "SIN_CARGA"
-        elif horas_reales > p.max_horas_semana: estado = "SOBRECARGA"
-        elif horas_reales < (p.max_horas_semana * 0.5): estado = "SUBUTILIZADO"
-
-        # NUEVO: Obtener competencias para el reporte detallado
-        comps = [f"{pm.materia.nombre} {pm.materia.nivel}" for pm in p.competencias]
-        comp_str = ", ".join(comps)
-
-        reporte.append({
-            'id': p.id, 'nombre': p.nombre,
-            'horas_asignadas': horas_reales, 'horas_maximas': p.max_horas_semana,
-            'estado': estado,
-            'competencias': comp_str,
-            'porcentaje': round((horas_reales / p.max_horas_semana) * 100, 1) if p.max_horas_semana > 0 else 0
-        })
-
-    # 2. Análisis Avanzado
-    cursos_unicos_query = (Horario
-                           .select(Horario.curso, Curso.modalidad, Curso.turno, Materia.nombre)
-                           .join(Curso, on=(Horario.curso == Curso.id))
-                           .switch(Horario)
-                           .join(Materia, on=(Horario.materia == Materia.id))
-                           .group_by(Horario.curso, Curso.modalidad, Curso.turno, Materia.nombre))
-
-    # CAMBIO: Usar PRESENCIAL en lugar de REGULAR
-    stats_modalidad = {'PRESENCIAL': 0, 'ONLINE_LJ': 0, 'ONLINE_FDS': 0}
-    stats_turno = {'Matutino': 0, 'Vespertino': 0, 'Nocturno': 0, 'FDS': 0}
-    stats_materias = {}
-
-    for entry in cursos_unicos_query:
-        # Modalidad
-        mod = entry.curso.modalidad
-        if mod == 'REGULAR': mod = 'PRESENCIAL' # Normalizar si hay datos viejos
+    try:
+        asignaciones = Horario.select()
+        profesores = Profesor.select()
+        reporte = []
         
-        if mod in stats_modalidad:
-            stats_modalidad[mod] += 1
-        else:
-            stats_modalidad[mod] = 1
-        
-        # Turno
-        turno = entry.curso.turno
-        if turno in stats_turno:
-            stats_turno[turno] += 1
-        else:
-            stats_turno[turno] = 1
+        total_capacidad_horas = 0
+        total_horas_asignadas = 0
+
+        for p in profesores:
+            horas_reales = 0
+            mis_horarios = [x for x in asignaciones if x.profesor.id == p.id]
+            for mh in mis_horarios:
+                duracion = mh.hora_fin - mh.hora_inicio
+                horas_reales += duracion
+
+            total_capacidad_horas += p.max_horas_semana
+            total_horas_asignadas += horas_reales
+
+            estado = "OK"
+            if horas_reales == 0: estado = "SIN_CARGA"
+            elif horas_reales > p.max_horas_semana: estado = "SOBRECARGA"
+            elif horas_reales < (p.max_horas_semana * 0.5): estado = "SUBUTILIZADO"
+
+            comps = [f"{pm.materia.nombre} {pm.materia.nivel}" for pm in p.competencias]
+            comp_str = ", ".join(comps)
+
+            reporte.append({
+                'id': p.id, 'nombre': p.nombre,
+                'horas_asignadas': horas_reales, 'horas_maximas': p.max_horas_semana,
+                'estado': estado,
+                'competencias': comp_str,
+                'porcentaje': round((horas_reales / p.max_horas_semana) * 100, 1) if p.max_horas_semana > 0 else 0
+            })
+
+        cursos_unicos_query = (Horario
+                               .select(Horario.curso, Curso.modalidad, Curso.turno, Materia.nombre)
+                               .join(Curso, on=(Horario.curso == Curso.id))
+                               .switch(Horario)
+                               .join(Materia, on=(Horario.materia == Materia.id))
+                               .group_by(Horario.curso, Curso.modalidad, Curso.turno, Materia.nombre))
+
+        stats_modalidad = {'PRESENCIAL': 0, 'ONLINE_LJ': 0, 'ONLINE_FDS': 0}
+        stats_turno = {'Matutino': 0, 'Vespertino': 0, 'Nocturno': 0, 'FDS': 0}
+        stats_materias = {}
+
+        for entry in cursos_unicos_query:
+            mod = entry.curso.modalidad
+            if mod == 'REGULAR': mod = 'PRESENCIAL' 
             
-        # Materia
-        mat_nombre = entry.materia.nombre
-        stats_materias[mat_nombre] = stats_materias.get(mat_nombre, 0) + 1
+            if mod in stats_modalidad:
+                stats_modalidad[mod] += 1
+            else:
+                stats_modalidad[mod] = 1
+            
+            turno = entry.curso.turno
+            if turno in stats_turno:
+                stats_turno[turno] += 1
+            else:
+                stats_turno[turno] = 1
+                
+            mat_nombre = entry.materia.nombre
+            stats_materias[mat_nombre] = stats_materias.get(mat_nombre, 0) + 1
 
-    top_materias = sorted(stats_materias.items(), key=lambda x: x[1], reverse=True)[:5]
+        top_materias = sorted(stats_materias.items(), key=lambda x: x[1], reverse=True)[:5]
 
-    return jsonify({
-        'profesores': reporte,
-        'resumen': {
-            'total_profesores': len(profesores),
-            'total_materias': len(stats_materias),
-            'total_cursos': cursos_unicos_query.count(),
-            'ocupacion_global_pct': round((total_horas_asignadas / total_capacidad_horas * 100), 1) if total_capacidad_horas > 0 else 0,
-            'distribucion_modalidad': stats_modalidad,
-            'distribucion_turno': stats_turno,
-            'top_materias': top_materias
-        }
-    })
+        return jsonify({
+            'profesores': reporte,
+            'resumen': {
+                'total_profesores': len(profesores),
+                'total_materias': len(stats_materias),
+                'total_cursos': cursos_unicos_query.count(),
+                'ocupacion_global_pct': round((total_horas_asignadas / total_capacidad_horas * 100), 1) if total_capacidad_horas > 0 else 0,
+                'distribucion_modalidad': stats_modalidad,
+                'distribucion_turno': stats_turno,
+                'top_materias': top_materias
+            }
+        })
+    except Exception as e:
+        current_app.logger.error(f"Error procesando las estadísticas globales: {str(e)}\nTraza:\n{traceback.format_exc()}")
+        return jsonify({'error': 'Error de sistema calculando las estadísticas en tiempo real.'}), 500
 
-# --- BACKUP ---
 @bp.route('/api/backup', methods=['GET'])
 def backup_data():
     try:
@@ -340,17 +363,18 @@ def backup_data():
         return Response(json.dumps(backup, indent=2), mimetype="application/json",
             headers={"Content-disposition": "attachment; filename=respaldo_configuracion.json"})
     except Exception as e:
-        current_app.logger.error(f"Error generando backup: {str(e)}")
-        return jsonify({'error': str(e)}), 500
+        current_app.logger.error(f"Error generando archivo de respaldo: {str(e)}\nTraza:\n{traceback.format_exc()}")
+        return jsonify({'error': 'Problema interno al crear el archivo de respaldo JSON.'}), 500
 
 @bp.route('/api/restore', methods=['POST'])
 def restore_data():
-    if 'file' not in request.files: return jsonify({'error': 'No file'}), 400
+    if 'file' not in request.files: 
+        return jsonify({'error': 'No se detectó el archivo de respaldo para su carga.'}), 400
     file = request.files['file']
     try:
         data = json.load(file)
         if data.get('system_signature') != 'GENERADOR_HORARIOS_V1':
-            return jsonify({'error': 'Firma inválida.'}), 400
+            return jsonify({'error': 'La firma digital del archivo es inválida o el archivo está corrupto.'}), 400
         
         with db.atomic():
             Horario.delete().execute()
@@ -377,7 +401,7 @@ def restore_data():
                     if materia_obj:
                         ProfesorMateria.create(profesor=nuevo_profe, materia=materia_obj)
         
-        return jsonify({'status': 'ok', 'message': 'Restaurado.'})
+        return jsonify({'status': 'ok', 'message': 'Restauración completada con éxito.'})
     except Exception as e:
-        current_app.logger.error(f"Error restaurando backup: {str(e)}")
-        return jsonify({'error': str(e)}), 500
+        current_app.logger.error(f"Error durante la lectura/escritura en la restauración de base de datos: {str(e)}\nTraza:\n{traceback.format_exc()}")
+        return jsonify({'error': 'Error catastrófico en la restauración. Revise el archivo subido.'}), 500

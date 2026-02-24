@@ -2,7 +2,6 @@
 
 {% block content %}
 <style>
-    /* Estilos para el Dashboard */
     .hero-card {
         transition: transform 0.3s ease, box-shadow 0.3s ease;
         cursor: default;
@@ -39,7 +38,7 @@
         <div class="loading-content">
             <div class="spinner-border text-primary" style="width: 3rem; height: 3rem;" role="status"></div>
             <h4 class="mt-3 fw-bold text-dark">Generando Horario...</h4>
-            <p class="text-muted">Por favor espere.</p>
+            <p class="text-muted">Por favor espere. El motor está trabajando.</p>
         </div>
     </div>
 
@@ -124,22 +123,28 @@
         methods: {
             async cargarEstadisticasRapidas() {
                 try {
-                    const res = await fetch('/api/estadisticas');
+                    const res = await fetch('/api/estadisticas', { cache: 'no-store' });
+                    if (!res.ok) throw new Error("Aviso de conectividad al motor de cálculo principal.");
                     const data = await res.json();
                     if (data.resumen) {
                         this.resumenStats = data.resumen;
                     }
                 } catch (e) {
-                    console.error("Error cargando stats", e);
+                    Swal.fire({
+                        title: 'Incidencia de Obtención',
+                        text: e.message, 
+                        icon: 'error',
+                        confirmButtonText: 'Continuar'
+                    });
                 }
             },
             async generarHorario() {
                 const confirm = await Swal.fire({
-                    title: '¿Generar nuevo horario?',
-                    text: "Se borrará el horario actual.",
+                    title: 'Operación Crítica: ¿Generar de cero?',
+                    text: "El proceso limpiará las distribuciones vigentes reemplazándolas por un cálculo nuevo automatizado.",
                     icon: 'warning',
                     showCancelButton: true,
-                    confirmButtonText: 'Sí, generar'
+                    confirmButtonText: 'Sí, ejecutar motor'
                 });
 
                 if (confirm.isConfirmed) {
@@ -149,18 +154,18 @@
                         const data = await res.json(); 
 
                         if (!res.ok) {
-                            throw new Error(data.message || "Error desconocido al generar.");
+                            throw new Error(data.message || "Motor de algoritmos interrumpido de manera anómala.");
                         }
 
                         await this.cargarEstadisticasRapidas();
-                        Swal.fire('¡Éxito!', data.message || 'Horario generado', 'success');
+                        Swal.fire('Generación Concluida', data.message || 'El cronograma ha sido esquematizado integralmente', 'success');
 
                     } catch (e) {
                         Swal.fire({
-                            title: 'Error de Generación',
+                            title: 'Caída de Sistema en Generación',
                             text: e.message, 
                             icon: 'error',
-                            confirmButtonText: 'Entendido'
+                            confirmButtonText: 'Revisar'
                         });
                     } finally {
                         this.loading = false;
