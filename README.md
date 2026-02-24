@@ -102,6 +102,13 @@ El sistema busca la "mejor" solución posible basándose en estos criterios de c
    ```
 
    El sistema estará disponible en `http://127.0.0.1:5000`.
+5. ##### Crear ejecutable:
+
+```
+pyinstaller --name "Sistema_Horarios" --windowed --onefile --add-data "app/templates;app/templates" --add-data "app/static;app/static" --collect-all ortools main.py
+```
+
+
 
 ---
 
